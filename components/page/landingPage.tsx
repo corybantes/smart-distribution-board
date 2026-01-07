@@ -14,6 +14,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
+import Image from "next/image";
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
@@ -93,12 +94,19 @@ export default function LandingPage() {
         <div className="mt-16 relative max-w-5xl mx-auto">
           <GlassCard className="p-2 bg-white/40 border-4 border-white/50 rounded-3xl shadow-2xl overflow-hidden">
             {/* Replace this with a screenshot of your actual dashboard later */}
-            <div className="aspect-video bg-linear-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center overflow-hidden relative">
-              <div className="absolute inset-0 bg-grid-slate-200 [linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25" />
+            <div className="aspect-video bg-linear-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center">
+              {/* <div className="absolute inset-0 bg-grid-slate-200 [linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25" />
               <div className="text-gray-400 font-medium z-10 flex flex-col items-center gap-2">
                 <LayoutDashboard size={48} className="text-gray-300" />
                 <span className="text-sm">Interactive Dashboard Preview</span>
-              </div>
+              </div> */}
+              <Image
+                src={"/Dashboard_preview.png"}
+                alt="Dashboard Preview"
+                width={300}
+                height={400}
+                className="object-cover"
+              />
             </div>
           </GlassCard>
         </div>
