@@ -1,5 +1,4 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Sidebar } from "@/components/layout/Sidebar";
 import Header from "@/components/layout/general/Header";
 import SidebarComponent from "@/components/layout/general/Sidebar";
 

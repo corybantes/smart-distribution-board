@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import nodemailer from 'nodemailer';
+import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 
 export async function POST(request: Request) {
   try {
@@ -8,11 +8,11 @@ export async function POST(request: Request) {
     // Configure the transporter
     // NOTE: Use environment variables for these in production!
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: {
-        user: 'YOUR_GMAIL_ADDRESS@gmail.com', 
-        pass: 'YOUR_GMAIL_APP_PASSWORD' // Generate this in Google Account > Security > App Passwords
-      }
+        user: "YOUR_GMAIL_ADDRESS@gmail.com",
+        pass: "YOUR_GMAIL_APP_PASSWORD", // Generate this in Google Account > Security > App Passwords
+      },
     });
 
     const mailOptions = {
@@ -32,9 +32,11 @@ export async function POST(request: Request) {
 
     await transporter.sendMail(mailOptions);
     return NextResponse.json({ success: true });
-
   } catch (error) {
     console.error("Email Error:", error);
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to send email" },
+      { status: 500 }
+    );
   }
 }
