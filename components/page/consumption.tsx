@@ -43,18 +43,18 @@ export default function Consumption() {
 
   const { data: config } = useSWR(
     user ? `/api/admin/config?uid=${user.uid}` : null,
-    fetcher
+    fetcher,
   );
 
   const { data: outlets } = useSWR(
     isAdmin && user ? `/api/admin/outlets?uid=${user.uid}` : null,
-    fetcher
+    fetcher,
   );
 
   const historyUrl = user
     ? `/api/energy/history?uid=${user.uid}&startDate=${
-        selectedRange.startDate
-      }&endDate=${selectedRange.endDate}${
+        selectedRange.startTs
+      }&endDate=${selectedRange.endTs}${
         selectedOutlet !== "total" ? `&outletId=${selectedOutlet}` : ""
       }`
     : null;
@@ -62,16 +62,14 @@ export default function Consumption() {
   const { data: apiResponse, isLoading } = useSWR<HistoryApiResponse>(
     historyUrl,
     fetcher,
-    { refreshInterval: 2000 }
+    { refreshInterval: 2000 },
   );
   // 3. Extract the array for the chart
   const historyData = apiResponse?.data || [];
-
-  // 4. Extract the pre-calculated Total from the API
   const totalUsage = apiResponse?.totalConsumption || 0;
 
   // 5. Calculate Financials
-  const price = config?.pricePerKwh || 100;
+  const price = config?.pricePerKwh || 206.8;
   const projectedBill = totalUsage * price;
 
   // 6. Calculate Real Average Daily Usage
@@ -80,8 +78,8 @@ export default function Consumption() {
     1,
     differenceInDays(
       parseISO(selectedRange.endDate),
-      parseISO(selectedRange.startDate)
-    ) + 1 // +1 to include the start day itself
+      parseISO(selectedRange.startDate),
+    ) + 1, // +1 to include the start day itself
   );
 
   const avgDaily = totalUsage / daysDiff;
@@ -93,12 +91,12 @@ export default function Consumption() {
 
   // URL includes 'page' parameter
   const tableUrl = user
-    ? `/api/energy/history/table?uid=${user.uid}&startDate=${selectedRange.startDate}&endDate=${selectedRange.endDate}&page=${tablePage}&limit=10`
+    ? `/api/energy/history/table?uid=${user.uid}&startDate=${selectedRange.startTs}&endDate=${selectedRange.endTs}&page=${tablePage}&limit=10${selectedOutlet !== "total" ? `&outletId=${selectedOutlet}` : ""}`
     : null;
 
   const { data: tableResponse, isLoading: tableLoading } = useSWR(
     tableUrl,
-    fetcher
+    fetcher,
   );
   if (!user)
     return (
@@ -134,8 +132,7 @@ export default function Consumption() {
         projectedBill={projectedBill}
         isLoading={isLoading}
         avgDaily={avgDaily}
-        startDate={selectedRange.startDate}
-        endDate={selectedRange.endDate}
+        selectedRange={selectedRange}
         totalUsage={totalUsage}
       />
 
@@ -149,11 +146,12 @@ export default function Consumption() {
       {/* 4. HISTORY TABLE */}
       <ConsumptionTable
         data={tableResponse?.data || []}
-        price={config?.pricePerKwh || 100}
+        price={price}
         loading={tableLoading}
+        isAdmin={isAdmin} // <--- ADD THIS PROP
         currentPage={tablePage}
         totalPages={tableResponse?.meta?.totalPages || 1}
-        onPageChange={setTablePage} // This triggers SWR re-fetch
+        onPageChange={setTablePage}
       />
     </div>
   );

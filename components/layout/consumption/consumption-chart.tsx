@@ -1,4 +1,13 @@
-import { XAxis, CartesianGrid, AreaChart, Area } from "recharts";
+"use client";
+
+import {
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  AreaChart,
+  Area,
+  ResponsiveContainer,
+} from "recharts";
 import { Card, CardContent, CardHeader } from "../../ui/card";
 import { ArrowUpDown, Calendar, Gauge, Loader2, Power } from "lucide-react";
 import {
@@ -7,12 +16,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import {
-  fillDataGaps,
-  fillDataGapsNew,
-  HistoryChartData,
-  HistoryData,
-} from "@/lib/utils";
+import { HistoryData } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -21,10 +25,11 @@ import {
   SelectValue,
 } from "../../ui/select";
 import { useState } from "react";
+import { format, parseISO } from "date-fns";
 
 export default function ConsumptionChart({
   isLoading,
-  historyData,
+  historyData = [],
   selectedRange,
 }: {
   isLoading: boolean;
@@ -32,117 +37,140 @@ export default function ConsumptionChart({
   selectedRange: any;
 }) {
   const [metrics, setMetrics] = useState<string>("power");
+
+  // --- SMART DATE FORMATTER ---
+  // If the range is <= 24 hours (e.g., 'today', 'yesterday'), show Hours (14:00)
+  // If > 24 hours (e.g., '7days', 'this_month'), show Days (Mar 10)
+  const formatXAxis = (dateStr: string) => {
+    try {
+      if (!dateStr) return "";
+      const date = parseISO(dateStr);
+      const isDaily = ["today", "yesterday"].includes(selectedRange?.value);
+      return format(date, isDaily ? "HH:mm" : "MMM dd");
+    } catch {
+      return "";
+    }
+  };
+
   const metricItems = [
     {
-      label: "Power",
+      label: "Power (Watts)",
       icon: Power,
       value: "power",
-      data: historyData,
       dataKey: "realPower",
+      unit: "W",
+      color: "var(--color-power)",
     },
     {
-      label: "Voltage",
+      label: "Voltage (Volts)",
       icon: Gauge,
       value: "voltage",
-      data: historyData,
       dataKey: "voltage",
+      unit: "V",
+      color: "var(--color-voltage)",
     },
     {
-      label: "Current",
+      label: "Current (Amps)",
       icon: ArrowUpDown,
       value: "current",
-      data: historyData,
       dataKey: "current",
+      unit: "A",
+      color: "var(--color-current)",
     },
   ];
+
   const chartConfig = {
-    desktop: {
-      label: "Desktop",
-      color: "var(--chart-1)",
-    },
-    mobile: {
-      label: "Mobile",
-      color: "var(--chart-2)",
-    },
+    usage: { label: "Energy (kWh)", color: "#3b82f6" }, // Blue
+    power: { label: "Real Power", color: "#f59e0b" }, // Orange
+    reactive: { label: "Reactive Power", color: "#ef4444" }, // Red
+    voltage: { label: "Voltage", color: "#8b5cf6" }, // Purple
+    current: { label: "Current", color: "#10b981" }, // Green
   } satisfies ChartConfig;
+
+  // Find the currently selected metric configuration
+  const activeMetric =
+    metricItems.find((m) => m.value === metrics) || metricItems[0];
+
   return (
     <>
-      <Card className="h-112.5 flex flex-col">
-        <CardHeader className="flex justify-between items-center mb-6">
+      {/* 1. ENERGY CONSUMPTION CHART (kWh) */}
+      <Card className="flex flex-col">
+        <CardHeader className="flex justify-between items-center mb-2 pb-0">
           <h2 className="text-lg font-bold flex items-center gap-2">
-            <Calendar size={18} className="text-primary" />
-            Consumption History
+            <Calendar size={18} className="text-blue-500" />
+            Energy Consumption
           </h2>
-          {/* <Button variant="outline" size="sm" className="hidden md:flex">
-              <Download className="mr-2 h-4 w-4" /> Export Data
-            </Button> */}
         </CardHeader>
-        <CardContent className="flex-1 w-full min-h-0">
+        <CardContent className="flex-1 w-full pt-4">
           {isLoading ? (
-            <div className="h-full w-full flex items-center justify-center">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <div className="h-75 w-full flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <ChartContainer
               config={chartConfig}
               className="aspect-auto h-75 w-full"
             >
-              <AreaChart
-                accessibilityLayer
-                data={fillDataGapsNew(
-                  historyData || [],
-                  selectedRange.value,
-                  selectedRange.startDate,
-                  selectedRange.endDate
-                )}
-                margin={{
-                  left: 12,
-                  right: 12,
-                }}
-              >
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) => value.slice(0, 3)}
-                />
-                <ChartTooltip
-                  cursor={false}
-                  content={<ChartTooltipContent indicator="dot" hideLabel />}
-                />
-                <Area
-                  dataKey="usage"
-                  type="linear"
-                  fill="var(--color-desktop)"
-                  fillOpacity={0.4}
-                  stroke="var(--color-desktop)"
-                />
-              </AreaChart>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={historyData}
+                  margin={{ left: 0, right: 12, top: 10, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    vertical={false}
+                    strokeDasharray="3 3"
+                    opacity={0.5}
+                  />
+
+                  {/* FIX: Formatted X-Axis */}
+                  <XAxis
+                    dataKey="date"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={10}
+                    tickFormatter={formatXAxis}
+                    className="text-xs"
+                  />
+
+                  {/* FIX: Added Y-Axis with units */}
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={10}
+                    tickFormatter={(val) => `${val} kWh`}
+                    width={65}
+                    className="text-xs font-medium"
+                  />
+
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="dot" />}
+                  />
+                  <Area
+                    name="Energy"
+                    dataKey="usage"
+                    type="monotone"
+                    fill="var(--color-usage)"
+                    fillOpacity={0.2}
+                    stroke="var(--color-usage)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </ChartContainer>
           )}
         </CardContent>
       </Card>
-      <Card className="h-112.5 flex flex-col">
-        <CardHeader className="flex justify-between items-center mb-6">
-          {metricItems.map(
-            (item) =>
-              item.value === metrics && (
-                <h2
-                  className="text-lg font-bold flex items-center gap-2"
-                  key={item.value}
-                >
-                  <item.icon size={18} className="text-primary" />
-                  {item.label}
-                </h2>
-              )
-          )}
-          {/* <Button variant="outline" size="sm" className="hidden md:flex">
-              <Download className="mr-2 h-4 w-4" /> Export Data
-            </Button> */}
+
+      {/* 2. REAL-TIME METRICS CHART (V, I, P) */}
+      <Card className="flex flex-col">
+        <CardHeader className="flex flex-row justify-between items-center mb-2 pb-0">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <activeMetric.icon size={18} className="text-primary" />
+            Live Metrics
+          </h2>
           <Select value={metrics} onValueChange={setMetrics}>
-            <SelectTrigger className="w-45 bg-white dark:bg-slate-900">
+            <SelectTrigger className="w-40 bg-white dark:bg-slate-900">
               <SelectValue placeholder="Select View" />
             </SelectTrigger>
             <SelectContent>
@@ -154,67 +182,76 @@ export default function ConsumptionChart({
             </SelectContent>
           </Select>
         </CardHeader>
-        <CardContent className="flex-1 w-full min-h-0">
+        <CardContent className="flex-1 w-full pt-4">
           {isLoading ? (
-            <div className="h-full w-full flex items-center justify-center">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <div className="h-75 w-full flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            metricItems.map(
-              (item) =>
-                item.value === metrics && (
-                  <ChartContainer
-                    key={item.value}
-                    config={chartConfig}
-                    className="aspect-auto h-75 w-full"
-                  >
-                    <AreaChart
-                      accessibilityLayer
-                      data={fillDataGaps(
-                        item.data || [],
-                        selectedRange.value,
-                        selectedRange.startDate,
-                        selectedRange.endDate
-                      )}
-                      margin={{
-                        left: 12,
-                        right: 12,
-                      }}
-                    >
-                      <CartesianGrid vertical={false} />
-                      <XAxis
-                        dataKey="date"
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={8}
-                        tickFormatter={(value) => value.slice(0, 3)}
-                      />
-                      <ChartTooltip
-                        cursor={false}
-                        content={
-                          <ChartTooltipContent indicator="dot" hideLabel />
-                        }
-                      />
-                      <Area
-                        dataKey={item.dataKey}
-                        type="linear"
-                        fill="var(--color-desktop)"
-                        fillOpacity={0.4}
-                        stroke="var(--color-desktop)"
-                      />
-                      {item.value === "power" && (
-                        <Area
-                          dataKey="reactivePower"
-                          type="linear"
-                          fill="var(--color-mobile)"
-                          fillOpacity={0.4}
-                          stroke="var(--color-mobile)"
-                        />
-                      )}
-                    </AreaChart>
-                  </ChartContainer>
-                )
-            )
+            <ChartContainer
+              config={chartConfig}
+              className="aspect-auto h-75 w-full"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={historyData}
+                  margin={{ left: 0, right: 12, top: 10, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    vertical={false}
+                    strokeDasharray="3 3"
+                    opacity={0.5}
+                  />
+
+                  <XAxis
+                    dataKey="date"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={10}
+                    tickFormatter={formatXAxis}
+                    className="text-xs"
+                  />
+
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={10}
+                    tickFormatter={(val) => `${val} ${activeMetric.unit}`}
+                    width={65}
+                    className="text-xs font-medium"
+                  />
+
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="dot" />}
+                  />
+
+                  <Area
+                    name={activeMetric.label.split(" ")[0]}
+                    dataKey={activeMetric.dataKey}
+                    type="monotone"
+                    fill={activeMetric.color}
+                    fillOpacity={0.2}
+                    stroke={activeMetric.color}
+                    strokeWidth={2}
+                  />
+
+                  {/* Render Reactive Power only if Power is selected */}
+                  {metrics === "power" && (
+                    <Area
+                      name="Reactive"
+                      dataKey="reactivePower"
+                      type="monotone"
+                      fill="var(--color-reactive)"
+                      fillOpacity={0.1}
+                      stroke="var(--color-reactive)"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                    />
+                  )}
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartContainer>
           )}
         </CardContent>
       </Card>

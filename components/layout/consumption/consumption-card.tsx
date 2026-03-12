@@ -1,15 +1,12 @@
-import { DollarSign, Loader2, TrendingUp, Zap } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../../ui/card";
+"use client";
+
+import { DollarSign, TrendingUp, Zap } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
+import { CardLoadingSkeleton } from "../general/Loading";
+import { formatDateRange } from "@/lib/utils";
 
 export default function ConsumptionCard({
-  startDate,
-  endDate,
+  selectedRange, // Pass the range object here
   totalUsage,
   isLoading,
   projectedBill,
@@ -18,86 +15,113 @@ export default function ConsumptionCard({
 }: {
   isLoading: boolean;
   price: number;
-  startDate: string;
-  endDate: string;
+  selectedRange: any;
   totalUsage: number;
   avgDaily: number;
   projectedBill: number;
 }) {
+  // --- SMART LABEL LOGIC ---
+  const getContextLabel = () => {
+    if (selectedRange?.value === "today") return "For Today";
+    if (selectedRange?.value === "yesterday") return "For Yesterday";
+
+    // Fallback to the human-readable date range for 7days, 30days, etc.
+    return `Period: ${formatDateRange(selectedRange.startDate, selectedRange.endDate)}`;
+  };
+
+  const contextText = getContextLabel();
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {/* Total Usage */}
-      <Card className=" @container/card bg-linear-to-br from-blue-600 to-blue-500 text-white border-none">
-        <CardHeader className="">
-          <CardTitle className="flex gap-4 text-blue-100 font-medium">
-            <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
-              <Zap size={24} />
+      {/* 1. Total Usage Card */}
+      <Card className="shadow-sm border-border overflow-hidden relative border-t-4 border-t-blue-500">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-3 text-sm text-muted-foreground font-medium uppercase tracking-wider">
+            <div className="p-2 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg">
+              <Zap size={18} />
             </div>
             Total Usage
           </CardTitle>
         </CardHeader>
-        <CardContent className=" font-bold tracking-tight">
+        <CardContent>
           {isLoading ? (
-            <Loader2 className="h-6 w-6 animate-spin mt-1" />
+            <CardLoadingSkeleton />
           ) : (
             <div>
-              <span className="text-3xl font-bold tracking-tight">
-                {totalUsage.toFixed(1)}{" "}
-              </span>
-              <span className="text-lg font-normal opacity-70">kWh</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
+                  {totalUsage.toFixed(1)}
+                </span>
+                <span className="text-lg font-medium text-muted-foreground">
+                  kWh
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2 font-bold uppercase tracking-widest opacity-70">
+                {contextText}
+              </p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Estimated Cost */}
-      <Card className="bg-white dark:bg-slate-900">
-        <CardHeader className="">
-          <CardDescription className="flex gap-4">
-            <div className="p-3 bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 rounded-full">
-              <DollarSign size={24} />
+      {/* 2. Estimated Cost Card */}
+      <Card className="shadow-sm border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-3 text-sm text-muted-foreground font-medium uppercase tracking-wider">
+            <div className="p-2 bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-lg">
+              <DollarSign size={18} />
             </div>
-
-            <p className="text-muted-foreground font-medium">Estimated Cost</p>
-          </CardDescription>
-          {isLoading ? (
-            <Loader2 className="h-6 w-6 animate-spin mt-1" />
-          ) : (
-            <CardTitle className="text-3xl font-bold tracking-tight">
-              ₦{" "}
-              {projectedBill.toLocaleString(undefined, {
-                maximumFractionDigits: 0,
-              })}
-              <p className="text-[10px] text-muted-foreground mt-1 font-normal">
-                Based on ₦{price}/kWh
-              </p>
-            </CardTitle>
-          )}
+            Estimated Cost (₦{price}/kWh)
+          </CardTitle>
         </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <CardLoadingSkeleton />
+          ) : (
+            <div>
+              <span className="text-4xl font-bold tracking-tight">
+                ₦
+                {projectedBill.toLocaleString(undefined, {
+                  maximumFractionDigits: 0,
+                })}
+              </span>
+              <p className="text-[11px] text-muted-foreground mt-2 font-bold uppercase tracking-widest opacity-70">
+                {contextText}
+              </p>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
-      {/* Average Usage */}
-      <Card className="bg-white dark:bg-slate-900">
-        <CardHeader className="">
-          <CardDescription className="flex gap-4">
-            <div className="p-3 bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 rounded-full">
-              <TrendingUp size={24} />
+      {/* 3. Average Daily Usage Card */}
+      <Card className="shadow-sm border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-3 text-sm text-muted-foreground font-medium uppercase tracking-wider">
+            <div className="p-2 bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 rounded-lg">
+              <TrendingUp size={18} />
             </div>
-            <p className="text-muted-foreground font-medium">
-              Avg. Daily Usage
-            </p>
-          </CardDescription>
-          {isLoading ? (
-            <Loader2 className="h-6 w-6 animate-spin mt-1" />
-          ) : (
-            <CardTitle className="text-3xl font-bold tracking-tight">
-              {avgDaily.toFixed(1)}{" "}
-              <span className="text-lg font-normal text-muted-foreground">
-                kWh
-              </span>
-            </CardTitle>
-          )}
+            Daily Average
+          </CardTitle>
         </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <CardLoadingSkeleton />
+          ) : (
+            <div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-bold tracking-tight">
+                  {avgDaily.toFixed(1)}
+                </span>
+                <span className="text-lg font-medium text-muted-foreground">
+                  kWh/day
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2 font-bold uppercase tracking-widest opacity-70">
+                Calculated over period
+              </p>
+            </div>
+          )}
+        </CardContent>
       </Card>
     </div>
   );

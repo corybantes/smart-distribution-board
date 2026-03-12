@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/billing-engine",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/monthly-snapshot",
+      "schedule": "5 0 1 * *"
     }
   ]
 }

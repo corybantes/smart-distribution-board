@@ -11,14 +11,14 @@ export default function WeatherCard({
   profile: UserProfile | undefined;
 }) {
   const [weather, setWeather] = useState<any>(null);
-  // 4. Fetch Weather (Only if profile has location)
+
   useEffect(() => {
     if (profile?.location?.lat && profile?.location?.lon) {
       const { lat, lon } = profile.location;
       const apiKey = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
       if (apiKey) {
         fetch(
-          `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`
+          `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`,
         )
           .then((res) => res.json())
           .then((data) => {
@@ -33,8 +33,10 @@ export default function WeatherCard({
       }
     }
   }, [profile]);
+
   return (
-    <Card className="col-span-1 bg-linear-to-br from-indigo-600 to-purple-700 text-primary border-none flex flex-col justify-between p-6">
+    // FIX: Changed text-primary to text-white for proper contrast on the gradient
+    <Card className="bg-linear-to-br from-indigo-600 to-purple-700 text-white border-none flex flex-col justify-between p-6 shadow-md h-full min-h-35">
       {weather ? (
         <>
           <div className="flex justify-between items-start">
@@ -43,24 +45,32 @@ export default function WeatherCard({
                 {profile?.city || "Local"}
               </h4>
               <p className="text-sm opacity-70">
-                {new Date().toLocaleDateString()}
+                {new Date().toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
               </p>
             </div>
-            <CloudSun size={32} className="text-yellow-300" />
+            <CloudSun size={32} className="text-yellow-300 drop-shadow-md" />
           </div>
           <div className="mt-4">
-            <div className="text-5xl font-bold">{weather.temp}°</div>
-            <div className="text-lg font-medium opacity-90 mt-1 capitalize">
+            <div className="text-5xl font-bold tracking-tighter">
+              {weather.temp}°
+            </div>
+            <div className="text-sm font-medium opacity-90 mt-1 capitalize tracking-wide">
               {weather.condition}
             </div>
           </div>
         </>
       ) : (
-        <div className="flex items-center justify-center h-full text-white/50">
+        <div className="flex flex-col items-center justify-center h-full text-white/70 space-y-2">
           {profile?.location ? (
-            <Loader2 className="animate-spin" />
+            <Loader2 className="animate-spin h-6 w-6" />
           ) : (
-            "No Location Set"
+            <span className="text-sm font-medium text-white/50">
+              Location not set
+            </span>
           )}
         </div>
       )}

@@ -4,108 +4,155 @@ import { adminRtdb, adminDb } from "@/lib/firebase-admin";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const uid = searchParams.get("uid");
-  const outletId = searchParams.get("outletId");
 
-  // Optional Date Filters (ISO Strings)
-  const startParam = searchParams.get("startDate");
-  const endParam = searchParams.get("endDate");
+  const startTs = searchParams.get("startDate");
+  const endTs = searchParams.get("endDate");
+  let requestedOutletId = searchParams.get("outletId");
 
   if (!uid)
     return NextResponse.json({ error: "UID required" }, { status: 400 });
 
   try {
-    // 1. Get SmartDB ID
+    // 1. Authenticate & Secure the User Role
     const userDoc = await adminDb.collection("users").doc(uid).get();
-    const smartDbId = userDoc.data()?.smartDbId;
+    if (!userDoc.exists)
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    const userData = userDoc.data()!;
+    const smartDbId = userData.smartDbId;
+    const role = userData.role;
 
     if (!smartDbId)
       return NextResponse.json({ error: "No device linked" }, { status: 404 });
 
+    // SECURITY OVERRIDE: Prevent Tenant Data Leaks
+    if (role === "tenant") {
+      requestedOutletId = userData.outletId;
+    }
+
     // 2. Define Time Range
-    // Default: Last 24 hours if no dates provided
     const now = Math.floor(Date.now() / 1000);
-    const start = startParam
-      ? Math.floor(new Date(startParam).getTime() / 1000)
-      : now - 86400;
-    const end = endParam
-      ? Math.floor(new Date(endParam).getTime() / 1000)
-      : now;
+    const start = startTs ? parseInt(startTs) : now - 86400;
+    const end = endTs ? parseInt(endTs) : now;
 
-    // 3. Query Realtime Database
+    // 3. Determine Aggregation Bucket Size
+    // If the selected range is greater than 24 hours, group by Day. Otherwise, by Hour.
+    const isDailyAggregation = end - start > 86400;
+
+    // 4. Query Realtime Database
     const historyRef = adminRtdb.ref(`Devices/ESP_${smartDbId}/History`);
-
     const snapshot = await historyRef
       .orderByChild("timestamp")
       .startAt(start)
       .endAt(end)
       .get();
 
-    if (!snapshot.exists()) return NextResponse.json([]);
+    if (!snapshot.exists())
+      return NextResponse.json({ data: [], totalConsumption: 0 });
 
     const rawData = snapshot.val();
-    // Convert object to array and sort by timestamp to ensure correct order
     const dataPoints = Object.values(rawData).sort(
-      (a: any, b: any) => a.timestamp - b.timestamp
+      (a: any, b: any) => a.timestamp - b.timestamp,
     ) as any[];
 
-    // 4. Process Data
-    let previousTimestamp = dataPoints[0]?.timestamp || start;
-    let totalKwh = 0;
+    // 5. Aggregation Dictionaries
+    let totalPeriodUsage = 0;
+    let previousEMap: Record<string, number> = {};
+    const chartAggregatedMap: Record<string, any> = {};
 
-    const result = dataPoints.map((entry, index) => {
-      let realPower = 0;
-      let reactivePower = 0;
-      let voltage = 0;
-      let current = 0;
+    dataPoints.forEach((entry) => {
+      // Create the Time Bucket
+      const d = new Date(entry.timestamp * 1000);
+      if (isDailyAggregation) {
+        d.setHours(0, 0, 0, 0);
+      } else {
+        d.setMinutes(0, 0, 0);
+      }
+      const timeBucketStr = d.toISOString();
 
-      // Extract specific outlet data or sum total
-      if (outletId) {
-        const o = entry[`O${outletId}`];
+      // Extract Raw Values
+      let P = 0,
+        Q = 0,
+        V = 0,
+        I = 0,
+        usage = 0;
+
+      if (requestedOutletId && requestedOutletId !== "total") {
+        const o = entry[`O${requestedOutletId}`];
         if (o) {
-          realPower = Number(o.P) || 0;
-          reactivePower = Number(o.Q) || 0;
-          voltage = Number(o.V) || 0;
-          current = Number(o.I) || 0;
+          P = Number(o.P) || 0;
+          Q = Number(o.Q) || 0;
+          V = Number(o.V) || 0;
+          I = Number(o.I) || 0;
+          let E = Number(o.E) || 0;
+
+          if (
+            previousEMap[requestedOutletId] !== undefined &&
+            E >= previousEMap[requestedOutletId]
+          ) {
+            usage = E - previousEMap[requestedOutletId];
+          }
+          previousEMap[requestedOutletId] = E;
         }
       } else {
         Object.keys(entry).forEach((key) => {
           if (key.startsWith("O") && typeof entry[key] === "object") {
-            realPower += Number(entry[key].P) || 0;
-            reactivePower += Number(entry[key].Q) || 0;
-            current += Number(entry[key].I) || 0;
-            voltage = Math.max(voltage, Number(entry[key].V) || 0);
+            const outId = key.replace("O", "");
+            P += Number(entry[key].P) || 0;
+            Q += Number(entry[key].Q) || 0;
+            I += Number(entry[key].I) || 0;
+            V = Math.max(V, Number(entry[key].V) || 0); // Voltage is max, not additive
+
+            let E = Number(entry[key].E) || 0;
+            if (previousEMap[outId] !== undefined && E >= previousEMap[outId]) {
+              usage += E - previousEMap[outId];
+            }
+            previousEMap[outId] = E;
           }
         });
       }
 
-      // 5. Calculate Usage (kWh) for this interval
-      // Usage = (Power(W) * TimeDiff(s)) / 3600 / 1000
-      const currentTimestamp = entry.timestamp;
-      const timeDiff = currentTimestamp - previousTimestamp; // Seconds since last reading
+      totalPeriodUsage += usage;
 
-      // Handle the first point or large gaps (ignore gaps > 1 hour to prevent spikes)
-      let usage = 0;
-      if (index > 0 && timeDiff > 0 && timeDiff < 3600) {
-        usage = (realPower * timeDiff) / 3600000;
+      // Add to Chart Aggregation Map
+      if (!chartAggregatedMap[timeBucketStr]) {
+        chartAggregatedMap[timeBucketStr] = {
+          date: timeBucketStr,
+          usage: 0,
+          P_sum: 0,
+          Q_sum: 0,
+          V_sum: 0,
+          I_sum: 0,
+          count: 0,
+        };
       }
 
-      previousTimestamp = currentTimestamp;
-      totalKwh += usage;
-
-      return {
-        timestamp: entry.timestamp,
-        date: new Date(entry.timestamp * 1000).toISOString(),
-        usage: parseFloat(usage.toFixed(6)), // Small interval usage
-        realPower,
-        reactivePower,
-        voltage,
-        current,
-      };
+      chartAggregatedMap[timeBucketStr].usage += usage;
+      chartAggregatedMap[timeBucketStr].P_sum += P;
+      chartAggregatedMap[timeBucketStr].Q_sum += Q;
+      chartAggregatedMap[timeBucketStr].V_sum += V;
+      chartAggregatedMap[timeBucketStr].I_sum += I;
+      chartAggregatedMap[timeBucketStr].count += 1;
     });
 
+    // 6. Format Final Chart Output (Sum Energy, Average Live Metrics)
+    const finalChartData = Object.values(chartAggregatedMap)
+      .map((bucket: any) => ({
+        date: bucket.date,
+        usage: parseFloat(bucket.usage.toFixed(4)),
+        realPower: parseFloat((bucket.P_sum / bucket.count).toFixed(2)),
+        reactivePower: parseFloat((bucket.Q_sum / bucket.count).toFixed(2)),
+        voltage: parseFloat((bucket.V_sum / bucket.count).toFixed(2)),
+        current: parseFloat((bucket.I_sum / bucket.count).toFixed(2)),
+      }))
+      .sort(
+        (a: any, b: any) =>
+          new Date(a.date).getTime() - new Date(b.date).getTime(),
+      );
+
     return NextResponse.json({
-      data: result,
-      totalConsumption: parseFloat(totalKwh.toFixed(4)),
+      data: finalChartData,
+      totalConsumption: parseFloat(totalPeriodUsage.toFixed(4)),
     });
   } catch (error: any) {
     console.error("History API Error:", error);

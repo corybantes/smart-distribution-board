@@ -13,6 +13,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc, // NEW IMPORT
   serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -95,21 +96,21 @@ export default function SignupPage() {
     const init = async () => {
       try {
         const res = await fetch(
-          "https://restcountries.com/v3.1/all?fields=name,cca2,idd,flag"
+          "https://restcountries.com/v3.1/all?fields=name,cca2,idd,flag",
         );
         const data = await res.json();
 
         const formattedCountries: CountryData[] = data
           .map((c: any) => ({
             name: c.name.common,
-            code: c.cca2, // Need ISO code for state API
+            code: c.cca2,
             flag: c.flag,
             phoneCode: c.idd.root
               ? c.idd.root + (c.idd.suffixes?.[0] || "")
               : "",
           }))
           .sort((a: CountryData, b: CountryData) =>
-            a.name.localeCompare(b.name)
+            a.name.localeCompare(b.name),
           );
 
         setCountries(formattedCountries);
@@ -117,7 +118,7 @@ export default function SignupPage() {
         const codes = formattedCountries
           .filter((c) => c.phoneCode)
           .map((c) => ({ code: c.phoneCode, country: c.code }))
-          .sort((a, b) => a.code.localeCompare(b.code)); // Sort by code (e.g., +1, +20...)
+          .sort((a, b) => a.code.localeCompare(b.code));
 
         setPhoneCodes(codes);
       } catch (e) {
@@ -132,15 +133,13 @@ export default function SignupPage() {
   };
 
   const handleCountrySelect = async (countryName: string) => {
-    // 1. Set Country
     const selectedCountry = countries.find((c) => c.name === countryName);
-    setFormData((prev) => ({ ...prev, country: countryName, state: "" })); // Reset state
+    setFormData((prev) => ({ ...prev, country: countryName, state: "" }));
     setStates([]);
     setOpenCountry(false);
 
     if (!selectedCountry) return;
 
-    // 2. Fetch States (using countriesnow.space)
     setLoadingStates(true);
     try {
       const res = await fetch(
@@ -148,8 +147,8 @@ export default function SignupPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ country: countryName }), // API uses name, not code usually
-        }
+          body: JSON.stringify({ country: countryName }),
+        },
       );
       const json = await res.json();
 
@@ -196,23 +195,19 @@ export default function SignupPage() {
 
   // --- STEP 3: Final Submission ---
   const handleSignup = async () => {
-    // Optional: Force address verification before signup
     if (!addressVerified || !formData.lat || !formData.lon) {
-      // You can comment this out if you want to allow signup without coordinates
       return alert("Please click 'Verify' to confirm your address location.");
     }
 
     setIsLoading(true);
     try {
-      // 1. Create Auth User
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
-        formData.password
+        formData.password,
       );
       const user = userCredential.user;
 
-      // 2. Prepare Data
       const fullPhone = `${formData.phoneCode}${formData.phoneNumber}`;
 
       const userData = {
@@ -223,7 +218,6 @@ export default function SignupPage() {
         state: formData.state,
         address: formData.address,
         city: formData.city,
-        // Save Coordinates
         location: {
           lat: formData.lat,
           lon: formData.lon,
@@ -232,15 +226,24 @@ export default function SignupPage() {
       };
 
       if (isTenant) {
-        // TENANT FLOW (Updating invite doc)
-        await updateDoc(doc(db, "users", formData.email), {
+        // TENANT FLOW: Fetch invite data, move to UID, delete old invite
+        const inviteRef = doc(db, "users", formData.email);
+        const inviteSnap = await getDoc(inviteRef);
+        const inviteData = inviteSnap.exists() ? inviteSnap.data() : {};
+
+        await setDoc(doc(db, "users", user.uid), {
+          ...inviteData, // Brings in outletId, smartDbId, adminId
           ...userData,
+          email: formData.email, // Ensure email is saved
           uid: user.uid,
-          role: "tenant",
+          role: "tenant", // Explicitly force role
           onboarded: true,
         });
+
+        // Clean up the temporary email document
+        await deleteDoc(inviteRef);
       } else {
-        // ADMIN FLOW (Creating new doc)
+        // ADMIN FLOW
         await setDoc(doc(db, "users", user.uid), {
           ...userData,
           email: formData.email,
@@ -250,8 +253,19 @@ export default function SignupPage() {
           createdAt: serverTimestamp(),
         });
       }
+      if (isTenant) {
+        // TENANT FLOW
+        // ... (existing tenant saving logic) ...
 
-      router.push("/");
+        // Tenants go straight to the dashboard
+        router.push(`/${user.uid}`);
+      } else {
+        // ADMIN FLOW
+        // ... (existing admin saving logic) ...
+
+        // Admins must configure the system first!
+        router.push(`/${user.uid}/settings/setup`);
+      }
     } catch (error: any) {
       alert(error.message);
     } finally {
@@ -259,51 +273,7 @@ export default function SignupPage() {
     }
   };
 
-  // --- ADDRESS VERIFICATION LOGIC ---
-  //   const verifyAddress = async () => {
-  //     // Basic validation
-  //     if (!formData.address || !formData.city || !formData.country) {
-  //       alert("Please fill in Address, City, and Country first.");
-  //       return;
-  //     }
-
-  //     setIsVerifyingAddr(true);
-  //     setAddressVerified(false);
-
-  //     try {
-  //       // Free OpenStreetMap API (Nominatim)
-  //       const query = `${formData.address}, ${formData.city}, ${formData.country}`;
-  //       const encodedQuery = encodeURIComponent(query);
-
-  //       const res = await fetch(
-  //         `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=1`
-  //       );
-  //       const data = await res.json();
-
-  //       if (data && data.length > 0) {
-  //         // Found it!
-  //         const location = data[0];
-  //         setAddressVerified(true);
-
-  //         // Save Lat/Lon
-  //         setFormData((prev) => ({
-  //           ...prev,
-  //           lat: parseFloat(location.lat),
-  //           lon: parseFloat(location.lon),
-  //         }));
-  //       } else {
-  //         alert(
-  //           "We couldn't find this location. Please check the spelling or add more details."
-  //         );
-  //       }
-  //     } catch (error) {
-  //       console.error("Address verification failed", error);
-  //       alert("Could not verify address at this time. Please try again.");
-  //     } finally {
-  //       setIsVerifyingAddr(false);
-  //     }
-  //   };
-
+  // --- ADDRESS VERIFICATION ---
   const verifyAddress = async () => {
     if (!formData.address || !formData.state || !formData.country) {
       alert("Please select Country, State, and enter Address.");
@@ -312,14 +282,13 @@ export default function SignupPage() {
     setIsVerifyingAddr(true);
     setAddressVerified(false);
     try {
-      // Improved Query: Address, City/Town, State, Country
       const query = `${formData.address}, ${
         formData.city ? formData.city + "," : ""
       } ${formData.state}, ${formData.country}`;
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          query
-        )}&limit=1`
+          query,
+        )}&limit=1`,
       );
       const data = await res.json();
       if (data && data.length > 0) {
@@ -356,16 +325,20 @@ export default function SignupPage() {
         const tenantSnap = await getDoc(tenantRef);
 
         if (tenantSnap.exists()) {
-          // Is Tenant
+          // Is Tenant: Move data from invite to actual UID
           const tenantData = tenantSnap.data();
           await setDoc(userDocRef, {
             ...tenantData,
+            email: user.email,
             uid: user.uid,
             firstName: user.displayName?.split(" ")[0] || "",
             lastName: user.displayName?.split(" ")[1] || "",
-            onboarded: false, // Must complete profile for address/phone
+            role: "tenant", // Force role
+            onboarded: false,
             updatedAt: serverTimestamp(),
           });
+          // Clean up the temporary email document
+          await deleteDoc(tenantRef);
         } else {
           // Is New Admin
           await setDoc(userDocRef, {
@@ -379,12 +352,23 @@ export default function SignupPage() {
             country: "",
             city: "",
             address: "",
-            onboarded: false, // Must complete profile
+            onboarded: false,
             createdAt: serverTimestamp(),
           });
         }
+
+        if (tenantSnap.exists()) {
+          // Is Tenant
+          // ... (existing tenant saving logic) ...
+
+          router.push(`/${user.uid}`); // Tenants go to dashboard
+        } else {
+          // Is New Admin
+          // ... (existing admin saving logic) ...
+
+          router.push(`/${user.uid}/settings/setup`); // Admins go to setup
+        }
       }
-      router.push("/dashboard");
     } catch (error: any) {
       if (error.code !== "auth/cancelled-popup-request") {
         console.error("Google Sign-In Error:", error);
@@ -403,10 +387,10 @@ export default function SignupPage() {
           <CardTitle>
             {step === 1 && "Create Account"}
             {step === 2 && "Personal Info"}
-            {/* {step === 3 && "Location & Contact"} */}
+            {step === 3 && "Location & Contact"}
           </CardTitle>
           <CardDescription>
-            Step {step} of 2 • {isTenant ? "Tenant Setup" : "Account Setup"}
+            Step {step} of 3 • {isTenant ? "Tenant Setup" : "Account Setup"}
           </CardDescription>
         </CardHeader>
 
@@ -458,7 +442,6 @@ export default function SignupPage() {
           {step === 2 && (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="grid grid-cols-2 gap-4">
-                {/*First Name*/}
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
                   <Input
@@ -469,7 +452,6 @@ export default function SignupPage() {
                     onChange={handleChange}
                   />
                 </div>
-                {/*Last Name*/}
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
                   <Input
@@ -481,71 +463,7 @@ export default function SignupPage() {
                   />
                 </div>
               </div>
-              {/* Phone */}
-              <div className="space-y-2">
-                <Label>Phone Number</Label>
-                <div className="flex gap-2">
-                  {/* Phone Code Combobox */}
-                  <Popover open={openPhone} onOpenChange={setOpenPhone}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className={`w-27.5 justify-between px-2 ${
-                          !formData.phoneCode ? "opacity-50" : ""
-                        }`}
-                      >
-                        {formData.phoneCode ? formData.phoneCode : "+000"}
-                        <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-35 p-0">
-                      <Command>
-                        <CommandInput placeholder="Search..." />
-                        <CommandList>
-                          <CommandGroup>
-                            {phoneCodes.map((item, idx) => (
-                              <CommandItem
-                                key={`${item.code}-${idx}`} // Unique key
-                                value={`${item.code} ${item.country}`} // Search by code or country code
-                                onSelect={() => {
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    phoneCode: item.code,
-                                  }));
-                                  setOpenPhone(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    formData.phoneCode === item.code
-                                      ? "opacity-100"
-                                      : "opacity-0"
-                                  )}
-                                />
-                                {item.code}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
 
-                  <Input
-                    name="phoneNumber"
-                    placeholder="8012345678"
-                    className="flex-1"
-                    value={formData.phoneNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phoneNumber: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              {/* Country Selection */}
-              {/* --- SEARCHABLE COUNTRY SELECT --- */}
               <div className="space-y-2 flex flex-col">
                 <Label>Country</Label>
                 <Popover open={openCountry} onOpenChange={setOpenCountry}>
@@ -583,7 +501,7 @@ export default function SignupPage() {
                                   "mr-2 h-4 w-4",
                                   formData.country === country.name
                                     ? "opacity-100"
-                                    : "opacity-0"
+                                    : "opacity-0",
                                 )}
                               />
                               {country.name}
@@ -595,8 +513,75 @@ export default function SignupPage() {
                   </PopoverContent>
                 </Popover>
               </div>
+            </div>
+          )}
+
+          {/* --- STEP 3: LOCATION & CONTACT --- */}
+          {step === 3 && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="space-y-2">
+                <Label>Phone Number</Label>
+                <div className="flex gap-2">
+                  <Popover open={openPhone} onOpenChange={setOpenPhone}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className={`w-32 justify-between px-2 ${
+                          !formData.phoneCode ? "opacity-50" : ""
+                        }`}
+                      >
+                        {formData.phoneCode ? formData.phoneCode : "+000"}
+                        <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-48 p-0">
+                      <Command>
+                        <CommandInput placeholder="Search..." />
+                        <CommandList>
+                          <CommandGroup>
+                            {phoneCodes.map((item, idx) => (
+                              <CommandItem
+                                key={`${item.code}-${idx}`}
+                                value={`${item.code} ${item.country}`}
+                                onSelect={() => {
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    phoneCode: item.code,
+                                  }));
+                                  setOpenPhone(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    formData.phoneCode === item.code
+                                      ? "opacity-100"
+                                      : "opacity-0",
+                                  )}
+                                />
+                                {item.code}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+
+                  <Input
+                    name="phoneNumber"
+                    placeholder="8012345678"
+                    className="flex-1"
+                    value={formData.phoneNumber}
+                    onChange={(e) =>
+                      setFormData({ ...formData, phoneNumber: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+
               <div className="flex justify-between gap-4">
-                {/* --- SEARCHABLE STATE SELECT --- */}
                 <div className="space-y-2 flex flex-col w-full">
                   <Label>State / Region</Label>
                   <Popover open={openState} onOpenChange={setOpenState}>
@@ -613,12 +598,12 @@ export default function SignupPage() {
                         {loadingStates
                           ? "Loading states..."
                           : formData.state
-                          ? formData.state
-                          : "Select state..."}
+                            ? formData.state
+                            : "Select state..."}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-100 p-0">
+                    <PopoverContent className="w-full p-0">
                       <Command>
                         <CommandInput placeholder="Search state..." />
                         <CommandList>
@@ -629,9 +614,6 @@ export default function SignupPage() {
                                 key={state}
                                 value={state}
                                 onSelect={(val) => {
-                                  // Command converts value to lowercase, so we use the original map value if needed,
-                                  // but for display using the original string is better.
-                                  // NOTE: CommandItem 'value' prop is used for filtering.
                                   setFormData((prev) => ({
                                     ...prev,
                                     state: state,
@@ -644,7 +626,7 @@ export default function SignupPage() {
                                     "mr-2 h-4 w-4",
                                     formData.state === state
                                       ? "opacity-100"
-                                      : "opacity-0"
+                                      : "opacity-0",
                                   )}
                                 />
                                 {state}
@@ -656,7 +638,7 @@ export default function SignupPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
-                {/* City */}
+
                 <div className="space-y-2 w-full">
                   <Label>City</Label>
                   <Input
@@ -671,7 +653,6 @@ export default function SignupPage() {
                 </div>
               </div>
 
-              {/* Address with Verification Button */}
               <div className="space-y-2">
                 <Label>Residential Address</Label>
                 <div className="flex gap-2">
@@ -718,7 +699,6 @@ export default function SignupPage() {
                 )}
               </div>
 
-              {/* Admin ID */}
               {!isTenant && (
                 <div className="space-y-2">
                   <Label
@@ -755,7 +735,7 @@ export default function SignupPage() {
               </Button>
             )}
 
-            {step < 2 ? (
+            {step < 3 ? (
               <Button
                 className="w-full"
                 onClick={step === 1 ? handleNextStep1 : handleNextStep2}

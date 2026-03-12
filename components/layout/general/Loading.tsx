@@ -23,3 +23,13 @@ export function AvatarLoading() {
     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
   </div>;
 }
+
+export function CardLoadingSkeleton({ isDark = false }: { isDark?: boolean }) {
+  const baseBg = isDark ? "bg-white/20" : "bg-muted";
+  return (
+    <div className="animate-pulse">
+      <div className={`h-10 w-32 rounded ${baseBg} mt-1`} />
+      <div className={`h-4 w-20 rounded ${baseBg} mt-2 opacity-70`} />
+    </div>
+  );
+}

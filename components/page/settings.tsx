@@ -15,13 +15,18 @@ export default function Settings() {
   // 1. Fetch Config
   const { data: config, isLoading: loadingConfig } = useSWR<SystemConfig>(
     user ? `/api/admin/config?uid=${user.uid}` : null,
-    fetcher
+    fetcher,
   );
 
   // 2. Fetch Outlets
   const { data: outlets, isLoading: loadingOutlets } = useSWR<Outlet[]>(
     user ? `/api/admin/outlets?uid=${user.uid}` : null,
-    fetcher
+    fetcher,
+  );
+
+  const { data: profile, isLoading: loadingProfile } = useSWR(
+    user ? `/api/user?uid=${user.uid}` : null,
+    fetcher,
   );
 
   // --- API HANDLERS ---
@@ -33,7 +38,7 @@ export default function Settings() {
     mutate(
       `/api/admin/config?uid=${user.uid}`,
       { ...config, ...updates },
-      false
+      false,
     );
 
     try {
@@ -51,6 +56,14 @@ export default function Settings() {
 
   if (loadingConfig || loadingOutlets) {
     return <Loading />;
+  }
+
+  if (profile && profile.role !== "admin") {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <h1 className="text-2xl font-bold text-red-500">Unauthorized Access</h1>
+      </div>
+    );
   }
 
   return (

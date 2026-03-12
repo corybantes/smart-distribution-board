@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
-import { useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -12,28 +11,29 @@ import {
   Zap,
   FileText,
   Settings,
-  LogOut,
-  Loader2,
   User2,
   Bell,
   LogOutIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
+
+// UI Components
+import { Avatar, AvatarFallback, AvatarImage } from "../../ui/avatar";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from "../../ui/sidebar";
-import { UserAvatar } from "./user-avatar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,8 +53,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "../../ui/avatar";
-import { useAuth } from "@/context/AuthContext";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -74,50 +72,45 @@ export default function SidebarComponent() {
     return () => unsub();
   }, []);
 
-  // 2. Fetch User Profile (To get Role)
-  const { data: profile, isLoading: loadingProfile } = useSWR(
+  // 2. Fetch User Profile
+  const { data: profile } = useSWR(
     user ? `/api/user?uid=${user.uid}` : null,
-    fetcher
+    fetcher,
   );
 
-  // 3. Fetch Config (To check System Mode)
-  // Only fetch config if we have a user.
-  // Note: For tenants, this might need adjustment depending on your backend logic,
-  // but for now we'll fetch based on the logged-in user or their linked admin.
-  // Assuming the API handles permission checks.
+  // 3. Fetch Config
   const { data: config } = useSWR(
     user && profile?.role === "admin"
       ? `/api/admin/config?uid=${user.uid}`
       : null,
-    fetcher
+    fetcher,
   );
 
-  // --- MENU LOGIC ---
-  const systemMode = config?.mode || "multi"; // Default to multi if unknown
-
-  const menuItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: `/${userId}` },
-    { icon: Zap, label: "Consumption", href: `/${userId}/consumption` },
-  ];
-
-  // Logic: Show Billing if Admin OR if System is in Multi-User mode
-  // Tenants usually need to see billing in Multi-User mode.
+  // --- MENU LOGIC WITH GROUPING ---
+  const systemMode = config?.mode || "multi";
   const showBilling =
     profile?.role === "admin" ||
     systemMode === "multi" ||
     profile?.role === "tenant";
 
+  // Group 1: Core Dashboard Features
+  const mainItems = [
+    { icon: LayoutDashboard, label: "Dashboard", href: `/${userId}` },
+    { icon: Zap, label: "Consumption", href: `/${userId}/consumption` },
+  ];
+
   if (showBilling) {
-    menuItems.push({
+    mainItems.push({
       icon: FileText,
       label: "Billing",
       href: `/${userId}/billing`,
     });
   }
 
-  // Settings is usually Admin only, or limited for Tenants
+  // Group 2: System & Settings
+  const systemItems = [];
   if (profile?.role === "admin") {
-    menuItems.push({
+    systemItems.push({
       icon: Settings,
       label: "Settings",
       href: `/${userId}/settings`,
@@ -133,77 +126,143 @@ export default function SidebarComponent() {
       console.error("Logout failed", error);
     }
   };
+
   return (
     <div>
-      <Sidebar collapsible="icon">
-        <SidebarHeader>
+      <Sidebar collapsible="icon" className="border-r shadow-xs">
+        {/* HEADER: Upgraded Logo Lockup */}
+        <SidebarHeader className="pt-4 pb-2 px-2">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                className="data-[slot=sidebar-menu-button]:p-1.5!"
-              >
-                <a href="#">
-                  <Zap className="size-5!" />
-                  <span className="text-base font-semibold">Smart DB</span>
-                </a>
+              <SidebarMenuButton size="lg" asChild>
+                <Link href={`/${userId}`}>
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-linear-to-br from-blue-600 to-indigo-600 text-white shadow-sm">
+                    <Zap className="size-5" fill="currentColor" />
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-bold text-base tracking-tight">
+                      SmartDB
+                    </span>
+                    <span className="truncate text-[10px] font-semibold tracking-widest uppercase text-muted-foreground">
+                      EnerGenius
+                    </span>
+                  </div>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
-        <SidebarContent>
+
+        <SidebarContent className="px-0 space-y-4 mt-2">
+          {/* GROUP 1: OVERVIEW */}
           <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {menuItems.map((item) => (
-                  <SidebarMenuItem key={item.label}>
-                    <SidebarMenuButton
-                      asChild
-                      className={cn(
-                        pathname === item.href && "font-semibold shadow-sm"
-                      )}
-                    >
-                      <a href={item.href}>
-                        <item.icon
-                          className={cn(
-                            pathname !== item.href && "text-muted-foreground"
-                          )}
-                        />
-                        <span>{item.label}</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/70 uppercase">
+              Overview
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="mt-1">
+              <SidebarMenu className="space-y-1">
+                {mainItems.map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <SidebarMenuItem key={item.label}>
+                      {/* Added tooltip for flawless collapsed behavior */}
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.label}
+                        className={cn(
+                          "transition-all duration-200 h-10 px-3",
+                          isActive
+                            ? "bg-primary text-primary-foreground font-semibold shadow-md hover:bg-primary/90 hover:text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground font-medium",
+                        )}
+                      >
+                        <Link href={item.href}>
+                          <item.icon
+                            className={cn(
+                              "size-5",
+                              isActive ? "text-primary-foreground" : "",
+                            )}
+                          />
+                          <span className="ml-2 group-data-[collapsible=icon]:hidden">
+                            {item.label}
+                          </span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+
+          {/* GROUP 2: SYSTEM (Only shows if there are items) */}
+          {systemItems.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                System
+              </SidebarGroupLabel>
+              <SidebarGroupContent className="mt-1">
+                <SidebarMenu className="space-y-1">
+                  {systemItems.map((item) => {
+                    const isActive = pathname === item.href;
+                    return (
+                      <SidebarMenuItem key={item.label}>
+                        <SidebarMenuButton
+                          asChild
+                          tooltip={item.label}
+                          className={cn(
+                            "transition-all duration-200 h-10 px-3",
+                            isActive
+                              ? "bg-primary text-primary-foreground font-semibold shadow-md hover:bg-primary/90 hover:text-primary-foreground"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground font-medium",
+                          )}
+                        >
+                          <Link href={item.href}>
+                            <item.icon
+                              className={cn(
+                                "size-5",
+                                isActive ? "text-primary-foreground" : "",
+                              )}
+                            />
+                            <span className="ml-2 group-data-[collapsible=icon]:hidden">
+                              {item.label}
+                            </span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
         </SidebarContent>
-        <SidebarFooter>
+
+        <SidebarFooter className="py-4 border-t">
           <SidebarMenu>
             <SidebarMenuItem>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton>
-                    <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
-                      {
-                        <>
-                          <AvatarImage
-                            src={userData?.photoURL}
-                            className="object-cover"
-                          />
-                          <AvatarFallback className="bg-primary/10 text-primary font-bold">
-                            {userData?.firstName
-                              ? userData.firstName.substring(0, 2).toUpperCase()
-                              : "US"}
-                          </AvatarFallback>
-                        </>
-                      }
+                  <SidebarMenuButton
+                    size="lg"
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  >
+                    <Avatar className="h-8 w-8 rounded-lg shadow-sm">
+                      <AvatarImage
+                        src={userData?.photoURL}
+                        className="object-cover"
+                      />
+                      <AvatarFallback className="bg-primary/10 text-primary font-bold rounded-lg">
+                        {userData?.firstName
+                          ? userData.firstName.substring(0, 2).toUpperCase()
+                          : "US"}
+                      </AvatarFallback>
                     </Avatar>
                     <div className="grid flex-1 text-left text-sm leading-tight">
-                      <span className="truncate font-medium">
-                        {userData?.firstName}
+                      <span className="truncate font-semibold">
+                        {userData?.firstName || "User"}
                       </span>
-                      <span className="text-muted-foreground truncate text-xs">
+                      <span className="truncate text-xs text-muted-foreground">
                         {userData?.email}
                       </span>
                     </div>
@@ -222,17 +281,17 @@ export default function SidebarComponent() {
                           src={userData?.photoURL}
                           alt={userData?.firstName}
                         />
-                        <AvatarFallback className="rounded-lg">
+                        <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-bold">
                           {userData?.firstName
                             ? userData.firstName.substring(0, 2).toUpperCase()
                             : "US"}
                         </AvatarFallback>
                       </Avatar>
                       <div className="grid flex-1 text-left text-sm leading-tight">
-                        <span className="truncate font-medium">
+                        <span className="truncate font-semibold">
                           {userData?.firstName}
                         </span>
-                        <span className="text-muted-foreground truncate text-xs">
+                        <span className="truncate text-xs text-muted-foreground">
                           {userData?.email}
                         </span>
                       </div>
@@ -240,20 +299,23 @@ export default function SidebarComponent() {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="cursor-pointer">
                       <Link href={`/${userId}/profile`}>
-                        <User2 />
+                        <User2 className="mr-2 size-4" />
                         Account
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Bell />
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Bell className="mr-2 size-4" />
                       Notifications
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setShowLogoutDialog(true)}>
-                    <LogOutIcon />
+                  <DropdownMenuItem
+                    onClick={() => setShowLogoutDialog(true)}
+                    className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950"
+                  >
+                    <LogOutIcon className="mr-2 size-4" />
                     Log out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -263,6 +325,7 @@ export default function SidebarComponent() {
         </SidebarFooter>
       </Sidebar>
 
+      {/* LOGOUT DIALOG */}
       <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -275,7 +338,7 @@ export default function SidebarComponent() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleLogout}
-              className="bg-red-500 hover:bg-red-600 focus:ring-red-500"
+              className="bg-red-500 hover:bg-red-600 text-white"
             >
               Sign Out
             </AlertDialogAction>

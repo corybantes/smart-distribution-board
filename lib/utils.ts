@@ -12,6 +12,7 @@ export interface UserProfile {
   smartDbId?: string;
   outletId?: string; // e.g., "1"
   location?: { lat: number; lon: number };
+  isConfigured: boolean;
 }
 
 export interface OutletData {
@@ -38,6 +39,7 @@ export interface HistoryData {
   realPower: number;
   usage: number;
   voltage: number;
+  outletId: number;
 }
 
 export interface HistoryApiResponse {
@@ -89,7 +91,7 @@ export const fillDataGaps = (
   rawData: HistoryData[],
   rangeCode: string,
   startDate: string,
-  endDate: string
+  endDate: string,
 ) => {
   if (!startDate || !endDate) return [];
 
@@ -133,7 +135,7 @@ export const fillDataGapsNew = (
   rawData: HistoryData[],
   rangeCode: string,
   startDate: string,
-  endDate: string
+  endDate: string,
 ) => {
   if (!startDate || !endDate) return [];
 
@@ -192,3 +194,19 @@ export const fillDataGapsNew = (
     };
   });
 };
+
+export function formatDateRange(start: string, end: string) {
+  if (!start || !end) return "Selected date range";
+  try {
+    const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+    const sDate = new Date(start).toLocaleDateString(undefined, opts);
+    const eDate = new Date(end).toLocaleDateString(undefined, opts);
+
+    // If it's the exact same day (e.g., "Today"), just return one date
+    if (sDate === eDate) return sDate;
+
+    return `${sDate} - ${eDate}`;
+  } catch (e) {
+    return "Selected date range";
+  }
+}

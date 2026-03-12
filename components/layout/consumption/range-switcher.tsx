@@ -12,6 +12,8 @@ export interface DateRangeOption {
   value: string;
   startDate: string;
   endDate: string;
+  startTs: number;
+  endTs: number;
 }
 
 export default function RangeSwitcher({

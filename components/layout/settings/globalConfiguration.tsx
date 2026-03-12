@@ -3,7 +3,6 @@ import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { Separator } from "../../ui/separator";
 import { Switch } from "../../ui/switch";
-import { Button } from "../../ui/button";
 import {
   Card,
   CardContent,
@@ -26,53 +25,35 @@ export default function GlobalConfiguration({
         <CardHeader>
           <CardTitle>Global Configuration</CardTitle>
           <CardDescription>
-            Manage system-wide limits and alerts.
+            Manage system-wide alerts and pricing.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Max Load & Buzzer */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label>Max Load Limit (Watts)</Label>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  defaultValue={config?.maxLoadLimit}
-                  onBlur={(e) =>
-                    updateConfig({ maxLoadLimit: Number(e.target.value) })
-                  }
-                />
-                <Button variant="outline" size="icon">
-                  <Save className="h-4 w-4" />
-                </Button>
-              </div>
+          {/* Buzzer Toggle */}
+          <div className="flex items-center justify-between border p-4 rounded-lg bg-muted/20">
+            <div className="space-y-0.5">
+              <Label className="text-base flex items-center gap-2">
+                {config?.buzzerEnabled ? (
+                  <Volume2 className="h-4 w-4" />
+                ) : (
+                  <VolumeX className="h-4 w-4" />
+                )}
+                Alarm Buzzer
+              </Label>
               <p className="text-xs text-muted-foreground">
-                System cuts power if this is exceeded.
+                Sound the hardware alarm on critical events or low balance.
               </p>
             </div>
-            <div className="flex items-center justify-between border p-4 rounded-lg">
-              <div className="space-y-0.5">
-                <Label className="text-base flex items-center gap-2">
-                  {config?.buzzerEnabled ? (
-                    <Volume2 className="h-4 w-4" />
-                  ) : (
-                    <VolumeX className="h-4 w-4" />
-                  )}
-                  Alarm Buzzer
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Sound alarm on overload/critical events.
-                </p>
-              </div>
-              <Switch
-                checked={config?.buzzerEnabled}
-                onCheckedChange={(checked) =>
-                  updateConfig({ buzzerEnabled: checked })
-                }
-              />
-            </div>
+            <Switch
+              checked={config?.buzzerEnabled}
+              onCheckedChange={(checked) =>
+                updateConfig({ buzzerEnabled: checked })
+              }
+            />
           </div>
+
           <Separator />
+
           {/* Price Configuration */}
           <div className="space-y-2">
             <Label>Electricity Rate (Currency / kWh)</Label>
@@ -84,18 +65,20 @@ export default function GlobalConfiguration({
                 <Input
                   type="number"
                   className="pl-8"
-                  defaultValue={config?.pricePerKwh || 100}
+                  defaultValue={config?.pricePerKwh || 206.8}
                   onBlur={(e) =>
                     updateConfig({ pricePerKwh: Number(e.target.value) })
                   }
                 />
               </div>
-              <p className="text-xs text-muted-foreground w-1/2">
-                Used to calculate bill projections on the dashboard.
+              <p className="text-xs text-muted-foreground w-1/2 ml-4">
+                Used to calculate bill projections and deduct wallet balances.
               </p>
             </div>
           </div>
+
           <Separator />
+
           {/* Billing Toggle */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
