@@ -5,10 +5,10 @@ import { triggerAlert } from "@/lib/notify";
 
 export async function GET(request: Request) {
   // 1. Security Check (Uncomment for production before deploying to Vercel)
-  // const authHeader = request.headers.get("authorization");
-  // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-  //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  // }
+  const authHeader = request.headers.get("authorization");
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const configSnap = await adminDb.collection("config").doc("global").get();
