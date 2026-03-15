@@ -123,7 +123,7 @@ export default function BillingTable({
 
       <CardContent>
         {/* Synchronized Container with absolute Loading Overlay */}
-        <div className="rounded-xl border border-border overflow-hidden relative min-h-100">
+        <div className="rounded-xl border border-border overflow-hidden relative min-h-75">
           {loading && (
             <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -175,8 +175,8 @@ export default function BillingTable({
                             <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
                               <ReceiptText size={10} />
                               {isDeduction
-                                ? `OUTLET_${bill.outletId || "?"}`
-                                : "ACCOUNT_CREDIT"}
+                                ? `OUTLET_${bill.outletId || "N/A"} • ${bill.userName || ""}`
+                                : `ACCOUNT_CREDIT_${bill.outletId} • ${bill.userName || ""}`}
                             </div>
                           </div>
                         </div>

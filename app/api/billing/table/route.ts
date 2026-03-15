@@ -17,13 +17,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "UID required" }, { status: 400 });
 
   try {
-    // 1. Check User Role
     const userDoc = await adminDb.collection("users").doc(uid).get();
     const userData = userDoc.data();
 
     let query;
 
-    // 2. Build the Base Query Dynamically
     if (userData?.role === "admin" && userData?.systemMode === "multi") {
       // LANDLORD MODE: Find all tenants belonging to this admin
       const tenantsSnap = await adminDb
@@ -33,27 +31,24 @@ export async function GET(request: Request) {
       const tenantUids = tenantsSnap.docs.map((doc) => doc.id);
 
       if (tenantUids.length === 0) {
-        // If they have no tenants yet, return an empty table
         return NextResponse.json({
           data: [],
           meta: { total: 0, page, limit, totalPages: 1 },
         });
       }
 
-      // Fetch billing records for ALL their tenants
       query = adminDb
         .collection("billing")
         .where("userId", "in", tenantUids)
         .orderBy("createdAt", "desc");
     } else {
-      // TENANT OR SINGLE-USER MODE: Fetch only their own records
+      // TENANT OR SINGLE-USER MODE
       query = adminDb
         .collection("billing")
         .where("userId", "==", uid)
         .orderBy("createdAt", "desc");
     }
 
-    // Apply Date Filters
     if (startDate) {
       query = query.where(
         "createdAt",
@@ -69,27 +64,49 @@ export async function GET(request: Request) {
       );
     }
 
-    // 3. Get Total Count (Efficient Aggregation)
     const countSnapshot = await query.count().get();
     const totalRecords = countSnapshot.data().count;
     const totalPages = Math.ceil(totalRecords / limit);
 
-    // 4. Execute Paginated Query using Offset
     const snapshot = await query.limit(limit).offset(offset).get();
 
-    // 5. Map Data
-    const history = snapshot.docs.map((doc) => {
+    // 5. Map Data AND Fetch User Details (Outlet ID & Name)
+    const historyPromises = snapshot.docs.map(async (doc) => {
       const data = doc.data();
       let dateStr = "Pending";
+
       if (data.createdAt) {
         if (typeof data.createdAt.toDate === "function") {
-          dateStr = data.createdAt.toDate().toLocaleDateString();
+          dateStr = data.createdAt.toDate().toISOString(); // Better for your frontend formatter
         } else {
-          dateStr = new Date(data.createdAt).toLocaleDateString();
+          dateStr = new Date(data.createdAt).toISOString();
         }
       }
-      return { id: doc.id, ...data, date: dateStr };
+
+      // FIX: Fetch the specific user to get their Outlet ID
+      let outletId = null;
+      let userName = "User";
+
+      try {
+        const uDoc = await adminDb.collection("users").doc(data.userId).get();
+        if (uDoc.exists) {
+          outletId = uDoc.data()?.outletId || null;
+          userName = uDoc.data()?.firstName || "User";
+        }
+      } catch (err) {
+        console.error("Failed to fetch user for billing row", err);
+      }
+
+      return {
+        id: doc.id,
+        ...data,
+        date: dateStr,
+        outletId: outletId, // Attach the outlet ID
+        userName: userName, // Attach the user's name (helpful for admins!)
+      };
     });
+
+    const history = await Promise.all(historyPromises);
 
     return NextResponse.json({
       data: history,

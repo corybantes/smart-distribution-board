@@ -12,8 +12,7 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
-  deleteDoc, // NEW IMPORT
+  deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -47,8 +46,6 @@ import {
   CommandList,
 } from "../ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 interface CountryData {
   name: string;
@@ -186,17 +183,15 @@ export default function SignupPage() {
     }
   };
 
-  // --- STEP 2: Personal Info ---
-  const handleNextStep2 = () => {
-    if (!formData.firstName || !formData.lastName)
-      return alert("Please enter your name");
-    setStep(3);
-  };
-
-  // --- STEP 3: Final Submission ---
+  // --- STEP 2: Final Submission ---
   const handleSignup = async () => {
+    if (!formData.firstName || !formData.lastName) {
+      return alert("Please enter your First and Last name.");
+    }
     if (!addressVerified || !formData.lat || !formData.lon) {
-      return alert("Please click 'Verify' to confirm your address location.");
+      return alert(
+        "Please click 'Verify' to confirm your residential address.",
+      );
     }
 
     setIsLoading(true);
@@ -226,22 +221,22 @@ export default function SignupPage() {
       };
 
       if (isTenant) {
-        // TENANT FLOW: Fetch invite data, move to UID, delete old invite
+        // TENANT FLOW
         const inviteRef = doc(db, "users", formData.email);
         const inviteSnap = await getDoc(inviteRef);
         const inviteData = inviteSnap.exists() ? inviteSnap.data() : {};
 
         await setDoc(doc(db, "users", user.uid), {
-          ...inviteData, // Brings in outletId, smartDbId, adminId
+          ...inviteData,
           ...userData,
-          email: formData.email, // Ensure email is saved
+          email: formData.email,
           uid: user.uid,
-          role: "tenant", // Explicitly force role
+          role: "tenant",
           onboarded: true,
         });
 
-        // Clean up the temporary email document
         await deleteDoc(inviteRef);
+        router.push(`/${user.uid}`);
       } else {
         // ADMIN FLOW
         await setDoc(doc(db, "users", user.uid), {
@@ -252,18 +247,6 @@ export default function SignupPage() {
           onboarded: true,
           createdAt: serverTimestamp(),
         });
-      }
-      if (isTenant) {
-        // TENANT FLOW
-        // ... (existing tenant saving logic) ...
-
-        // Tenants go straight to the dashboard
-        router.push(`/${user.uid}`);
-      } else {
-        // ADMIN FLOW
-        // ... (existing admin saving logic) ...
-
-        // Admins must configure the system first!
         router.push(`/${user.uid}/settings/setup`);
       }
     } catch (error: any) {
@@ -325,7 +308,6 @@ export default function SignupPage() {
         const tenantSnap = await getDoc(tenantRef);
 
         if (tenantSnap.exists()) {
-          // Is Tenant: Move data from invite to actual UID
           const tenantData = tenantSnap.data();
           await setDoc(userDocRef, {
             ...tenantData,
@@ -333,14 +315,13 @@ export default function SignupPage() {
             uid: user.uid,
             firstName: user.displayName?.split(" ")[0] || "",
             lastName: user.displayName?.split(" ")[1] || "",
-            role: "tenant", // Force role
+            role: "tenant",
             onboarded: false,
             updatedAt: serverTimestamp(),
           });
-          // Clean up the temporary email document
           await deleteDoc(tenantRef);
+          router.push(`/${user.uid}`);
         } else {
-          // Is New Admin
           await setDoc(userDocRef, {
             uid: user.uid,
             email: user.email,
@@ -355,19 +336,10 @@ export default function SignupPage() {
             onboarded: false,
             createdAt: serverTimestamp(),
           });
+          router.push(`/${user.uid}/settings/setup`);
         }
-
-        if (tenantSnap.exists()) {
-          // Is Tenant
-          // ... (existing tenant saving logic) ...
-
-          router.push(`/${user.uid}`); // Tenants go to dashboard
-        } else {
-          // Is New Admin
-          // ... (existing admin saving logic) ...
-
-          router.push(`/${user.uid}/settings/setup`); // Admins go to setup
-        }
+      } else {
+        router.push(`/${user.uid}`);
       }
     } catch (error: any) {
       if (error.code !== "auth/cancelled-popup-request") {
@@ -381,16 +353,17 @@ export default function SignupPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">
       <Card
-        className={`w-full shadow-lg ${step > 1 ? "max-w-lg" : "max-w-md"}`}
+        className={`w-full shadow-lg transition-all duration-300 ${
+          step === 2 ? "max-w-2xl" : "max-w-md"
+        }`}
       >
         <CardHeader>
           <CardTitle>
             {step === 1 && "Create Account"}
-            {step === 2 && "Personal Info"}
-            {step === 3 && "Location & Contact"}
+            {step === 2 && "Personal & Location Info"}
           </CardTitle>
           <CardDescription>
-            Step {step} of 3 • {isTenant ? "Tenant Setup" : "Account Setup"}
+            Step {step} of 2 • {isTenant ? "Tenant Setup" : "Account Setup"}
           </CardDescription>
         </CardHeader>
 
@@ -438,10 +411,11 @@ export default function SignupPage() {
             </div>
           )}
 
-          {/* --- STEP 2: PERSONAL INFO --- */}
+          {/* --- STEP 2: MERGED INFO & LOCATION --- */}
           {step === 2 && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+              {/* Row 1: Name */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
                   <Input
@@ -464,61 +438,7 @@ export default function SignupPage() {
                 </div>
               </div>
 
-              <div className="space-y-2 flex flex-col">
-                <Label>Country</Label>
-                <Popover open={openCountry} onOpenChange={setOpenCountry}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openCountry}
-                      className={`w-full justify-between ${
-                        !formData.country ? "text-muted-foreground" : ""
-                      }`}
-                    >
-                      {formData.country
-                        ? formData.country
-                        : "Select country..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-100 p-0">
-                    <Command>
-                      <CommandInput placeholder="Search country..." />
-                      <CommandList>
-                        <CommandEmpty>No country found.</CommandEmpty>
-                        <CommandGroup>
-                          {countries.map((country) => (
-                            <CommandItem
-                              key={country.name}
-                              value={country.name}
-                              onSelect={(currentValue) =>
-                                handleCountrySelect(currentValue)
-                              }
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  formData.country === country.name
-                                    ? "opacity-100"
-                                    : "opacity-0",
-                                )}
-                              />
-                              {country.name}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-          )}
-
-          {/* --- STEP 3: LOCATION & CONTACT --- */}
-          {step === 3 && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+              {/* Row 2: Phone */}
               <div className="space-y-2">
                 <Label>Phone Number</Label>
                 <div className="flex gap-2">
@@ -581,7 +501,58 @@ export default function SignupPage() {
                 </div>
               </div>
 
-              <div className="flex justify-between gap-4">
+              {/* Row 3: Country & State */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2 flex flex-col">
+                  <Label>Country</Label>
+                  <Popover open={openCountry} onOpenChange={setOpenCountry}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openCountry}
+                        className={`w-full justify-between ${
+                          !formData.country ? "text-muted-foreground" : ""
+                        }`}
+                      >
+                        {formData.country
+                          ? formData.country
+                          : "Select country..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-75 p-0">
+                      <Command>
+                        <CommandInput placeholder="Search country..." />
+                        <CommandList>
+                          <CommandEmpty>No country found.</CommandEmpty>
+                          <CommandGroup>
+                            {countries.map((country) => (
+                              <CommandItem
+                                key={country.name}
+                                value={country.name}
+                                onSelect={(currentValue) =>
+                                  handleCountrySelect(currentValue)
+                                }
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    formData.country === country.name
+                                      ? "opacity-100"
+                                      : "opacity-0",
+                                  )}
+                                />
+                                {country.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
                 <div className="space-y-2 flex flex-col w-full">
                   <Label>State / Region</Label>
                   <Popover open={openState} onOpenChange={setOpenState}>
@@ -603,7 +574,7 @@ export default function SignupPage() {
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
+                    <PopoverContent className="w-75 p-0">
                       <Command>
                         <CommandInput placeholder="Search state..." />
                         <CommandList>
@@ -638,8 +609,11 @@ export default function SignupPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
+              </div>
 
-                <div className="space-y-2 w-full">
+              {/* Row 4: City & Address */}
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-4">
+                <div className="space-y-2">
                   <Label>City</Label>
                   <Input
                     name="city"
@@ -651,56 +625,57 @@ export default function SignupPage() {
                     }}
                   />
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label>Residential Address</Label>
-                <div className="flex gap-2">
-                  <Input
-                    name="address"
-                    placeholder="123 Marina Street"
-                    className={
-                      addressVerified
-                        ? "border-green-500 focus-visible:ring-green-500"
-                        : ""
-                    }
-                    value={formData.address}
-                    onChange={(e) => {
-                      handleChange(e);
-                      setAddressVerified(false);
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant={addressVerified ? "outline" : "secondary"}
-                    onClick={verifyAddress}
-                    disabled={isVerifyingAddr || addressVerified}
-                    className="shrink-0"
-                  >
-                    {isVerifyingAddr ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : addressVerified ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    ) : (
-                      "Verify"
-                    )}
-                  </Button>
-                </div>
-                {addressVerified && (
-                  <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-                    <MapPin size={12} /> Coordinates found:{" "}
-                    {formData.lat?.toFixed(4)}, {formData.lon?.toFixed(4)}
-                  </p>
-                )}
-                {!addressVerified && formData.address.length > 5 && (
-                  <p className="text-xs text-muted-foreground">
-                    Click verify to confirm this location exists.
-                  </p>
-                )}
-              </div>
-
-              {!isTenant && (
                 <div className="space-y-2">
+                  <Label>Residential Address</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      name="address"
+                      placeholder="123 Marina Street"
+                      className={
+                        addressVerified
+                          ? "border-green-500 focus-visible:ring-green-500"
+                          : ""
+                      }
+                      value={formData.address}
+                      onChange={(e) => {
+                        handleChange(e);
+                        setAddressVerified(false);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant={addressVerified ? "outline" : "secondary"}
+                      onClick={verifyAddress}
+                      disabled={isVerifyingAddr || addressVerified}
+                      className="shrink-0"
+                    >
+                      {isVerifyingAddr ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : addressVerified ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      ) : (
+                        "Verify"
+                      )}
+                    </Button>
+                  </div>
+                  {addressVerified && (
+                    <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                      <MapPin size={12} /> Coordinates found:{" "}
+                      {formData.lat?.toFixed(4)}, {formData.lon?.toFixed(4)}
+                    </p>
+                  )}
+                  {!addressVerified && formData.address.length > 5 && (
+                    <p className="text-xs text-muted-foreground">
+                      Click verify to confirm this location exists.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 5: Smart DB ID (Admin Only) */}
+              {!isTenant && (
+                <div className="space-y-2 pt-2 border-t border-gray-100">
                   <Label
                     htmlFor="smartDbId"
                     className="flex items-center gap-2"
@@ -724,21 +699,21 @@ export default function SignupPage() {
         </CardContent>
 
         <CardFooter className="flex flex-col gap-4">
-          <div className="flex justify-between w-full gap-2">
-            {step > 1 && (
+          <div className="flex justify-between w-full gap-4">
+            {step === 2 && (
               <Button
                 variant="outline"
-                className="w-48"
-                onClick={() => setStep(step - 1)}
+                className="w-1/3"
+                onClick={() => setStep(1)}
               >
                 Back
               </Button>
             )}
 
-            {step < 3 ? (
+            {step === 1 ? (
               <Button
                 className="w-full"
-                onClick={step === 1 ? handleNextStep1 : handleNextStep2}
+                onClick={handleNextStep1}
                 disabled={isLoading}
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -746,7 +721,7 @@ export default function SignupPage() {
               </Button>
             ) : (
               <Button
-                className="w-48"
+                className="w-2/3"
                 onClick={handleSignup}
                 disabled={isLoading}
               >

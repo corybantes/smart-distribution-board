@@ -13,6 +13,7 @@ export interface UserProfile {
   outletId?: string; // e.g., "1"
   location?: { lat: number; lon: number };
   isConfigured: boolean;
+  historicalBills: number[];
 }
 
 export interface OutletData {

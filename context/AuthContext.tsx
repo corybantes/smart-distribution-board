@@ -26,6 +26,7 @@ interface UserData {
   lastName: string;
   address: string;
   onboarded: boolean;
+  historicalBills: number[];
 }
 
 interface AuthContextType {

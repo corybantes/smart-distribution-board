@@ -17,20 +17,17 @@ export default function Billing() {
   const [isTopUpOpen, setIsTopUpOpen] = useState(false);
   const [page, setPage] = useState(1);
 
+  // 1. Fetch User Profile (Now contains historicalBills!)
   const { data: profile } = useSWR(
     user ? `/api/user?uid=${user.uid}` : null,
     fetcher,
   );
 
-  // 1. Fetch Paginated Table Data (Transactions Ledger)
+  const isAdmin = profile?.role === "admin";
+
+  // 2. Fetch Paginated Table Data (Transactions Ledger)
   const { data: billingTableData, isLoading: isTableLoading } = useSWR(
     user ? `/api/billing/table?uid=${user.uid}&page=${page}&limit=5` : null,
-    fetcher,
-  );
-
-  // 2. Fetch General Billing Data (Balance, History, and Monthly Usage)
-  const { data: billingData, isLoading } = useSWR(
-    user ? `/api/billing?uid=${user.uid}` : null,
     fetcher,
   );
 
@@ -40,79 +37,77 @@ export default function Billing() {
     fetcher,
   );
 
-  // 4. Fetch Outlets for Top-Up Modal
+  // 4. Fetch Outlets for Top-Up Modal (Only needed for Admins)
   const { data: outlets } = useSWR(
-    user ? `/api/admin/outlets?uid=${user.uid}` : null,
+    isAdmin && user ? `/api/admin/outlets?uid=${user.uid}` : null,
     fetcher,
   );
 
-  // --- PREDICTION LOGIC (3-Month WMA) ---
-  const price = config?.pricePerKwh || 206.8; // Fallback to Band A rate
+  // --- PREDICTION & GRAPH LOGIC ---
+  const price = config?.pricePerKwh || 206.8;
 
-  // Extract past energy (kWh) usage, reverse them (oldest first)
-  const historyEnergy =
-    billingData?.monthlyUsage?.map((h: any) => h.usage || 0).reverse() || [];
+  // Extract the array directly from the profile.
+  // (Our Cron Job already saved these as Naira amounts, not kWh!)
+  const historicalData = profile?.historicalBills || [];
 
-  // Predict next month's Energy (kWh), then convert to NGN
-  const predictedEnergyKwh = predictNextBill(historyEnergy);
-  const predictedAmount = predictedEnergyKwh * price;
+  // Admins don't get a predicted bill, tenants do.
+  const predictedAmount = isAdmin ? 0 : predictNextBill(historicalData);
 
-  // --- PREPARE GRAPH DATA ---
-  const graphData = [
-    ...(billingData?.monthlyUsage
-      ?.slice(0, 5)
-      .reverse()
-      .map((h: any) => ({
-        name: h.month, // e.g., "2026-02"
-        cost: (h.usage || 0) * price, // Convert historical kWh to Cost
-      })) || []),
-    { name: "Next Month", cost: predictedAmount, isPrediction: true },
-  ];
+  // Dynamically generate the Graph Data with Month Labels
+  const graphData = historicalData.map((amount: number, index: number) => {
+    const d = new Date();
+    // Count backwards based on the array length (e.g., 3 months ago, 2 months ago...)
+    d.setMonth(d.getMonth() - (historicalData.length - index));
 
-  // FIX: Only show full-page loader on INITIAL load, not during table pagination!
-  if (isLoading || !profile) return <Loading />;
+    return {
+      name: d.toLocaleString("default", { month: "short", year: "numeric" }), // e.g., "Jan 2026"
+      cost: amount,
+    };
+  });
+
+  // Add the prediction to the end of the graph for tenants
+  if (!isAdmin && graphData.length > 0) {
+    graphData.push({
+      name: "Next Month",
+      cost: predictedAmount,
+      isPrediction: true,
+    });
+  }
+
+  // Only show full-page loader on INITIAL load
+  if (!profile) return <Loading />;
 
   return (
     <div className="flex flex-col flex-1 w-full gap-6 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-20">
-      {/* PAGE HEADER */}
-      {/* <div className="flex flex-col gap-1.5">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-3">
-          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
-            <Wallet size={24} />
-          </div>
-          Billing & Wallet
-        </h1>
-        <p className="text-muted-foreground text-sm max-w-2xl">
-          Manage your energy credits, view AI-powered usage forecasts, and track
-          your complete transaction history.
-        </p>
-      </div> */}
-
-      {/* TOP ROW: GRID LAYOUT FOR EQUAL HEIGHTS */}
-      {/* FIX: Changed from flex to grid grid-cols-1 lg:grid-cols-2 with items-stretch */}
+      {/* TOP ROW: GRID LAYOUT */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
         {/* 1. BALANCE CARD */}
         <div className="flex w-full h-full">
           <BillingCard
             setIsTopUpOpen={setIsTopUpOpen}
-            billingData={billingData}
+            // Passing a mocked object so we don't break your BillingCard's internal props
+            billingData={{
+              balance: profile.balance || 0,
+              unbilledAmount: profile.unbilledAmount || 0,
+            }}
             user={profile}
             pricePerKwh={price}
           />
         </div>
 
-        {/* 2. PREDICTION CARD (WMA Powered) */}
-        <div className="flex w-full h-full">
-          <BillingChart
-            historyAmounts={historyEnergy.map((e: number) => e * price)}
-            graphData={graphData}
-            predictedAmount={predictedAmount}
-          />
-        </div>
+        {/* 2. PREDICTION CARD (Hidden for Admins as it doesn't apply to them) */}
+        {!isAdmin && (
+          <div className="flex w-full h-full">
+            <BillingChart
+              historyAmounts={historicalData}
+              graphData={graphData}
+              predictedAmount={predictedAmount}
+            />
+          </div>
+        )}
       </div>
 
       {/* 3. HISTORY TABLE */}
-      {/* FIX: Pass the table loading state directly to the table component */}
       <BillingTable
         uid={user?.uid || ""}
         billingData={billingTableData?.data || []}
@@ -123,7 +118,7 @@ export default function Billing() {
       />
 
       {/* TOP-UP MODAL (Dialog) */}
-      {profile?.role === "admin" && (
+      {isAdmin && (
         <BillingTopup
           user={user}
           isTopUpOpen={isTopUpOpen}

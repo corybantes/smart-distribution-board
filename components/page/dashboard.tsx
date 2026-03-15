@@ -41,23 +41,22 @@ export default function Dashboard() {
     return () => unsub();
   }, [router]);
 
-  // 2. Fetch User Profile
+  // 2. Fetch User Profile (This now includes historicalBills!)
   const { data: profile, isLoading: isLoadingProfile } = useSWR<UserProfile>(
     user ? `/api/user?uid=${user.uid}` : null,
     fetcher,
   );
 
-  // FIX 1: Derive isAdmin dynamically directly from the profile!
   const isAdmin = profile?.role === "admin";
 
-  // FIX 2: Check setup routing AFTER profile loads
+  // Check setup routing AFTER profile loads
   useEffect(() => {
     if (isAdmin && !profile?.isConfigured) {
       router.push(`/${user?.uid}/settings/setup`);
     }
   }, [profile, isAdmin, router, user?.uid]);
 
-  // 3. Fetch Data
+  // 3. Fetch Live Energy Data & Config
   const { data: energyData, isLoading: isEnergyLoading } =
     useSWR<EnergyApiResponse>(
       user ? `/api/energy?uid=${user.uid}` : null,
@@ -85,17 +84,14 @@ export default function Dashboard() {
   const historyData = apiResponse?.data || [];
   const totalUsage = apiResponse?.totalConsumption || 0;
 
-  // 5. Billing & Prediction Math
-  const { data: billingData } = useSWR(
-    user ? `/api/billing?uid=${user.uid}` : null,
-    fetcher,
-  );
+  // 5. Billing & Prediction Math (Optimized!)
+  // We extract the array directly from the profile. No extra API call needed!
+  const historicalData = profile?.historicalBills || [];
 
-  const historyAmounts = billingData?.history
-    ?.map((h: any) => h.amount)
-    .reverse() || [5000, 6000, 7000];
-  const predictedAmount = predictNextBill(historyAmounts);
-  const price = config?.pricePerKwh || 206.8; // Updated to match your default tariff
+  // Admins don't get a personal prediction, so we pass 0
+  const predictedAmount = isAdmin ? 0 : predictNextBill(historicalData);
+
+  const price = config?.pricePerKwh || 206.8;
   const projectedBill = totalUsage * price;
 
   // 6. Dynamic Chart Headers
@@ -129,17 +125,7 @@ export default function Dashboard() {
           <RangeSwitcher setSelectedRange={setSelectedRange} />
         </div>
 
-        {/* 1. METRICS CARDS (Admin vs Tenant logic handled inside) */}
-        {/* <DashboardCard
-          user={user}
-          profile={profile}
-          energyData={energyData}
-          totalCost={projectedBill}
-          predictedCost={predictedAmount}
-          totalUsage={totalUsage}
-          isLoading={isEnergyLoading || isHistoryLoading} // Pass loading state down!
-        /> */}
-
+        {/* 1. METRICS CARDS */}
         <DashboardMetrics
           profile={profile}
           totalUsage={totalUsage}
@@ -148,7 +134,8 @@ export default function Dashboard() {
           isLoading={isEnergyLoading || isHistoryLoading}
           selectedRange={selectedRange}
         />
-        {/* 2. SYSTEM HEALTH CARDS (Admin Only) */}
+
+        {/* 2. SYSTEM HEALTH CARDS */}
         {isAdmin && (
           <HardwareAdminList
             energyData={energyData}
@@ -165,8 +152,8 @@ export default function Dashboard() {
           />
         )}
 
+        {/* 3. MAIN CHART */}
         <div className="px-4 lg:px-6 space-y-6">
-          {/* 3. MAIN CHART */}
           <ChartAreaDefault
             chartConfig={chartConfig}
             chartData={historyData}
@@ -174,7 +161,7 @@ export default function Dashboard() {
             chartTitle={chartTitle}
             dataKey={"usage"}
             selectedRange={selectedRange}
-            isLoading={isHistoryLoading} // Pass loading state down!
+            isLoading={isHistoryLoading}
           />
         </div>
       </div>
