@@ -41,7 +41,7 @@ export default function Dashboard() {
     return () => unsub();
   }, [router]);
 
-  // 2. Fetch User Profile (This now includes historicalBills!)
+  // 2. Fetch User Profile
   const { data: profile, isLoading: isLoadingProfile } = useSWR<UserProfile>(
     user ? `/api/user?uid=${user.uid}` : null,
     fetcher,
@@ -49,12 +49,12 @@ export default function Dashboard() {
 
   const isAdmin = profile?.role === "admin";
 
-  // Check setup routing AFTER profile loads
+  // Check setup routing AFTER profile completes loading
   useEffect(() => {
-    if (isAdmin && !profile?.isConfigured) {
+    if (!isLoadingProfile && isAdmin && !profile?.isConfigured) {
       router.push(`/${user?.uid}/settings/setup`);
     }
-  }, [profile, isAdmin, router, user?.uid]);
+  }, [profile, isLoadingProfile, isAdmin, router, user?.uid]);
 
   // 3. Fetch Live Energy Data & Config
   const { data: energyData, isLoading: isEnergyLoading } =
@@ -64,7 +64,7 @@ export default function Dashboard() {
       { refreshInterval: 2000 },
     );
 
-  const { data: config } = useSWR(
+  const { data: config, isLoading: isLoadingConfig } = useSWR(
     user ? `/api/admin/config?uid=${user.uid}` : null,
     fetcher,
   );
@@ -84,11 +84,8 @@ export default function Dashboard() {
   const historyData = apiResponse?.data || [];
   const totalUsage = apiResponse?.totalConsumption || 0;
 
-  // 5. Billing & Prediction Math (Optimized!)
-  // We extract the array directly from the profile. No extra API call needed!
+  // 5. Billing & Prediction Math
   const historicalData = profile?.historicalBills || [];
-
-  // Admins don't get a personal prediction, so we pass 0
   const predictedAmount = isAdmin ? 0 : predictNextBill(historicalData);
 
   const price = config?.pricePerKwh || 206.8;
@@ -112,8 +109,14 @@ export default function Dashboard() {
     return String(outlet.id) === String(profile?.outletId);
   });
 
-  // Global Loading State
-  if (loadingUser || isLoadingProfile || !profile) {
+  // Combine loading states for smooth skeleton rendering
+  const isMetricsLoading =
+    isLoadingProfile || isEnergyLoading || isHistoryLoading || isLoadingConfig;
+  const isHardwareLoading = isLoadingProfile || isEnergyLoading;
+  const isChartLoading = isLoadingProfile || isHistoryLoading;
+
+  // Full page loader ONLY for initial auth check
+  if (loadingUser || !user) {
     return <Loading />;
   }
 
@@ -131,24 +134,24 @@ export default function Dashboard() {
           totalUsage={totalUsage}
           totalCost={projectedBill}
           predictedCost={predictedAmount}
-          isLoading={isEnergyLoading || isHistoryLoading}
+          isLoading={isMetricsLoading} // <-- Passes combined loading state
           selectedRange={selectedRange}
         />
 
         {/* 2. SYSTEM HEALTH CARDS */}
-        {isAdmin && (
+        {/* The ternary operator neatly splits logic while sharing the loading state */}
+        {isAdmin ? (
           <HardwareAdminList
             energyData={energyData}
             outlets={visibleOutlets}
             user={user}
-            isLoading={isHistoryLoading}
+            isLoading={isHardwareLoading} // <-- Passes combined loading state
             profile={profile}
           />
-        )}
-        {!isAdmin && (
+        ) : (
           <HardwareTenantWidget
             outlet={visibleOutlets[0]}
-            isLoading={isHistoryLoading}
+            isLoading={isHardwareLoading} // <-- Passes combined loading state
           />
         )}
 
@@ -161,7 +164,7 @@ export default function Dashboard() {
             chartTitle={chartTitle}
             dataKey={"usage"}
             selectedRange={selectedRange}
-            isLoading={isHistoryLoading}
+            isLoading={isChartLoading} // <-- Passes combined loading state
           />
         </div>
       </div>

@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { toast } from "sonner"; // <-- Switched to Sonner for premium notifications
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,20 +33,22 @@ export default function LoginPage() {
   // --- EMAIL/PASSWORD LOGIN ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.email || !form.password)
-      return alert("Please fill in all fields");
+    if (!form.email || !form.password) {
+      return toast.error("Please fill in all fields.");
+    }
 
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, form.email, form.password);
+      toast.success("Welcome back!");
       // The Dashboard Layout will handle the check for "onboarded" status
       router.push("/");
     } catch (err: any) {
       console.error(err);
       if (err.code === "auth/invalid-credential") {
-        alert("Invalid email or password.");
+        toast.error("Invalid email or password.");
       } else {
-        alert("Login failed. Please try again.");
+        toast.error("Login failed. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -101,11 +104,12 @@ export default function LoginPage() {
         }
       }
 
+      toast.success("Welcome back!");
       router.push("/dashboard");
     } catch (error: any) {
       if (error.code !== "auth/cancelled-popup-request") {
         console.error("Google Sign-In Error:", error);
-        alert("Google Sign-In failed.");
+        toast.error("Google Sign-In failed. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -132,6 +136,7 @@ export default function LoginPage() {
                 placeholder="m@example.com"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
+                disabled={loading} // Prevent typing while loading
               />
             </div>
 
@@ -153,6 +158,7 @@ export default function LoginPage() {
                   onChange={(e) =>
                     setForm({ ...form, password: e.target.value })
                   }
+                  disabled={loading} // Prevent typing while loading
                 />
                 <Button
                   type="button"
@@ -160,6 +166,7 @@ export default function LoginPage() {
                   size="sm"
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4 text-gray-500" />

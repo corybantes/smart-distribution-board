@@ -1,6 +1,7 @@
 import React from "react";
 import { Skeleton } from "../../ui/skeleton";
 import { Loader2 } from "lucide-react";
+import { TableRow, TableCell } from "../../ui/table"; // <-- Add this import
 
 function Loading() {
   return (
@@ -19,9 +20,11 @@ export function SidebarLoading() {
 }
 
 export function AvatarLoading() {
-  <div className="h-full w-full flex items-center justify-center bg-muted">
-    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-  </div>;
+  return (
+    <div className="h-full w-full flex items-center justify-center bg-muted">
+      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+    </div>
+  );
 }
 
 export function CardLoadingSkeleton({ isDark = false }: { isDark?: boolean }) {
@@ -31,5 +34,40 @@ export function CardLoadingSkeleton({ isDark = false }: { isDark?: boolean }) {
       <div className={`h-10 w-32 rounded ${baseBg} mt-1`} />
       <div className={`h-4 w-20 rounded ${baseBg} mt-2 opacity-70`} />
     </div>
+  );
+}
+
+// --- NEW REUSABLE TABLE SKELETON ---
+export function TableLoadingSkeleton({
+  rows = 5,
+  columns = 4,
+}: {
+  rows?: number;
+  columns?: number;
+}) {
+  return (
+    <>
+      {Array(rows)
+        .fill(0)
+        .map((_, rowIndex) => (
+          <TableRow key={`skeleton-row-${rowIndex}`}>
+            {Array(columns)
+              .fill(0)
+              .map((_, colIndex) => (
+                <TableCell key={`skeleton-col-${colIndex}`}>
+                  <Skeleton
+                    className={`h-4 rounded-md ${
+                      colIndex === 0
+                        ? "w-24" // Shorter first column (e.g., ID or Date)
+                        : colIndex === columns - 1
+                          ? "w-16 ml-auto" // Right-aligned last column (e.g., Amount or Actions)
+                          : "w-full max-w-45" // Standard middle columns
+                    }`}
+                  />
+                </TableCell>
+              ))}
+          </TableRow>
+        ))}
+    </>
   );
 }

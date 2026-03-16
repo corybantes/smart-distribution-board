@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Home, Users } from "lucide-react";
+import { toast } from "sonner";
 
 export default function SystemConfiguration() {
   const [user, loading] = useAuthState(auth);
@@ -95,11 +96,11 @@ export default function SystemConfiguration() {
         }
       }
 
-      alert("Configuration saved successfully!");
+      toast.success("Configuration saved successfully!");
       router.push("/dashboard");
     } catch (error: any) {
       console.error("Error saving config:", error);
-      alert("Failed to save configuration: " + error.message);
+      toast.error("Failed to save configuration: " + error.message);
     } finally {
       setIsSaving(false);
     }

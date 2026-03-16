@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users } from "lucide-react";
+import { Users, Loader2 } from "lucide-react"; // <-- Added Loader2
 import {
   Bar,
   BarChart,
@@ -17,7 +17,13 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 
-export default function BillingAdminChart({ outlets }: { outlets: any[] }) {
+export default function BillingAdminChart({
+  outlets,
+  isLoading, // <-- Added loading prop
+}: {
+  outlets: any[];
+  isLoading?: boolean;
+}) {
   // Format the outlets data for the Recharts BarChart
   const chartData = (outlets || []).map((outlet) => ({
     name: `O${outlet.id} (${outlet.tenantName?.split(" ")[0] || "Vacant"})`,
@@ -43,11 +49,22 @@ export default function BillingAdminChart({ outlets }: { outlets: any[] }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end pt-4">
-        {chartData.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-            No active tenants found.
+        {isLoading ? (
+          // --- LOADING STATE ---
+          <div className="h-full w-full min-h-50 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : chartData.length === 0 ? (
+          // --- EMPTY STATE (Updated to match other charts) ---
+          <div className="h-full w-full min-h-50 flex flex-col items-center justify-center text-muted-foreground rounded-lg border-2 border-dashed border-muted bg-muted/10 p-6">
+            <Users className="h-10 w-10 mb-3 opacity-20" />
+            <p className="text-sm font-medium">No active tenants found</p>
+            <p className="text-xs opacity-70 mt-1">
+              Configure outlets to see tenant balances.
+            </p>
           </div>
         ) : (
+          // --- ACTUAL CHART ---
           <ChartContainer
             config={chartConfig}
             className="h-full w-full min-h-50"

@@ -22,6 +22,8 @@ import {
 import { Button } from "../../ui/button";
 import { ServerPagination } from "../general/server-pagination";
 import { format, parseISO, isValid } from "date-fns";
+import { toast } from "sonner";
+import { TableLoadingSkeleton } from "../general/Loading"; // <-- Imported reusable skeleton
 
 export default function BillingTable({
   uid,
@@ -29,7 +31,7 @@ export default function BillingTable({
   onPageChange,
   currentPage,
   totalPages,
-  loading, // NEW: Added loading prop for consistency with ConsumptionTable
+  loading,
 }: {
   uid: string;
   billingData: any[];
@@ -53,13 +55,19 @@ export default function BillingTable({
   const handleExport = async () => {
     if (!uid) return;
     setIsExporting(true);
+
+    // Optional: Show a loading toast while generating a large CSV
+    const toastId = toast.loading("Preparing your export...");
+
     try {
       const res = await fetch(
         `/api/billing/table?uid=${uid}&page=1&limit=5000`,
       );
       const json = await res.json();
+
       if (!json.data || json.data.length === 0) {
-        alert("No data available to export.");
+        toast.dismiss(toastId);
+        toast.error("No data available to export.");
         return;
       }
 
@@ -84,16 +92,27 @@ export default function BillingTable({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      // Trigger Success Toast!
+      toast.dismiss(toastId);
+      toast.success("Export Successful! Your ledger has been downloaded.");
     } catch (error) {
       console.error("Export failed", error);
+      toast.dismiss(toastId);
+      toast.error("An error occurred while generating your CSV.");
     } finally {
       setIsExporting(false);
     }
   };
 
+  // Check if it's the very first load (loading is true, but no data yet)
+  const isInitialLoad = loading && (!billingData || billingData.length === 0);
+
+  // Check if we are just switching pages (loading is true, but we already have old data on screen)
+  const isPaginating = loading && billingData && billingData.length > 0;
+
   return (
     <Card className="shadow-sm border-border">
-      {/* Synchronized Header Layout */}
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div className="space-y-1">
           <CardTitle className="text-xl font-bold flex items-center gap-2">
@@ -122,16 +141,15 @@ export default function BillingTable({
       </CardHeader>
 
       <CardContent>
-        {/* Synchronized Container with absolute Loading Overlay */}
         <div className="rounded-xl border border-border overflow-hidden relative min-h-75">
-          {loading && (
-            <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
+          {/* Overlay Spinner ONLY shows during pagination so the table doesn't disappear */}
+          {isPaginating && (
+            <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] z-10 flex items-center justify-center">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
           )}
 
           <Table>
-            {/* Synchronized Clean Headers */}
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="w-55">Timestamp</TableHead>
@@ -142,7 +160,11 @@ export default function BillingTable({
             </TableHeader>
 
             <TableBody>
-              {billingData && billingData.length > 0 ? (
+              {isInitialLoad ? (
+                // --- REUSABLE SKELETON COMPONENT ---
+                <TableLoadingSkeleton rows={5} columns={4} />
+              ) : billingData && billingData.length > 0 ? (
+                // --- ACTUAL DATA ROWS ---
                 billingData.map((bill: any) => {
                   const isDeduction = bill.type === "usage" || bill.amount < 0;
 
@@ -158,7 +180,11 @@ export default function BillingTable({
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div
-                            className={`p-2 rounded-lg ${isDeduction ? "bg-red-50 text-red-600 dark:bg-red-900/20" : "bg-green-50 text-green-600 dark:bg-green-900/20"}`}
+                            className={`p-2 rounded-lg ${
+                              isDeduction
+                                ? "bg-red-50 text-red-600 dark:bg-red-900/20"
+                                : "bg-green-50 text-green-600 dark:bg-green-900/20"
+                            }`}
                           >
                             {isDeduction ? (
                               <ArrowUpRight size={16} />
@@ -176,7 +202,7 @@ export default function BillingTable({
                               <ReceiptText size={10} />
                               {isDeduction
                                 ? `OUTLET_${bill.outletId || "N/A"} • ${bill.userName || ""}`
-                                : `ACCOUNT_CREDIT_${bill.outletId} • ${bill.userName || ""}`}
+                                : `ACCOUNT_CREDIT • ${bill.userName || ""}`}
                             </div>
                           </div>
                         </div>
@@ -197,7 +223,11 @@ export default function BillingTable({
 
                       <TableCell className="text-right tabular-nums">
                         <div
-                          className={`inline-flex items-center justify-end px-2.5 py-0.5 rounded-md font-bold text-sm ${isDeduction ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}
+                          className={`inline-flex items-center justify-end px-2.5 py-0.5 rounded-md font-bold text-sm ${
+                            isDeduction
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-emerald-600 dark:text-emerald-400"
+                          }`}
                         >
                           {isDeduction ? "-" : "+"}
                           {new Intl.NumberFormat("en-NG", {
@@ -210,16 +240,15 @@ export default function BillingTable({
                   );
                 })
               ) : (
+                // --- EMPTY STATE ---
                 <TableRow>
                   <TableCell colSpan={4} className="h-64 text-center">
-                    {!loading && (
-                      <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <History size={32} className="mb-2 opacity-20" />
-                        <p className="text-sm font-medium">
-                          No transactions found for this period.
-                        </p>
-                      </div>
-                    )}
+                    <div className="flex flex-col items-center justify-center text-muted-foreground">
+                      <History size={32} className="mb-2 opacity-20" />
+                      <p className="text-sm font-medium">
+                        No transactions found for this period.
+                      </p>
+                    </div>
                   </TableCell>
                 </TableRow>
               )}

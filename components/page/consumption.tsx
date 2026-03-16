@@ -4,53 +4,48 @@ import { useState, useEffect } from "react";
 import useSWR from "swr";
 import { differenceInDays, parseISO } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
-import { Loader2 } from "lucide-react";
 import ConsumptionChart from "../layout/consumption/consumption-chart";
 import ConsumptionTable from "../layout/consumption/consumption-table";
 import ConsumptionCard from "../layout/consumption/consumption-card";
 import OutletSwitcher from "../layout/consumption/outlet-switcher";
 import RangeSwitcher from "../layout/consumption/range-switcher";
-import {
-  fetcher,
-  HistoryApiResponse,
-  HistoryChartData,
-  HistoryData,
-} from "@/lib/utils";
+import Loading from "../layout/general/Loading"; // <-- Imported your new Loading component
+import { fetcher, HistoryApiResponse } from "@/lib/utils";
 import { getDateRanges } from "@/lib/date-utils";
 
 export default function Consumption() {
   const { user } = useAuth();
   const [selectedRange, setSelectedRange] = useState(getDateRanges()[0]);
   const [selectedOutlet, setSelectedOutlet] = useState<string>("total");
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [tenantOutletId, setTenantOutletId] = useState<string | null>(null);
 
+  // 1. REFACTOR: Fetch User Profile via SWR to get the `isLoadingProfile` state
+  const { data: profile, isLoading: isLoadingProfile } = useSWR(
+    user ? `/api/user?uid=${user.uid}` : null,
+    fetcher,
+  );
+
+  const isAdmin = profile?.role === "admin";
+
+  // Automatically set the selected outlet for tenants once profile loads
   useEffect(() => {
-    if (user) {
-      fetch(`/api/user?uid=${user.uid}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.role === "admin") {
-            setIsAdmin(true);
-          } else {
-            setIsAdmin(false);
-            setTenantOutletId(data.outletId);
-            setSelectedOutlet(data.outletId);
-          }
-        });
+    if (profile && !isAdmin) {
+      setSelectedOutlet(profile.outletId);
     }
-  }, [user]);
+  }, [profile, isAdmin]);
 
-  const { data: config } = useSWR(
+  // 2. Fetch System Config
+  const { data: config, isLoading: isLoadingConfig } = useSWR(
     user ? `/api/admin/config?uid=${user.uid}` : null,
     fetcher,
   );
 
+  // 3. Fetch Outlets (Admins only)
   const { data: outlets } = useSWR(
     isAdmin && user ? `/api/admin/outlets?uid=${user.uid}` : null,
     fetcher,
   );
 
+  // 4. Fetch Chart History
   const historyUrl = user
     ? `/api/energy/history?uid=${user.uid}&startDate=${
         selectedRange.startTs
@@ -59,12 +54,9 @@ export default function Consumption() {
       }`
     : null;
 
-  const { data: apiResponse, isLoading } = useSWR<HistoryApiResponse>(
-    historyUrl,
-    fetcher,
-    { refreshInterval: 2000 },
-  );
-  // 3. Extract the array for the chart
+  const { data: apiResponse, isLoading: isHistoryLoading } =
+    useSWR<HistoryApiResponse>(historyUrl, fetcher, { refreshInterval: 2000 });
+
   const historyData = apiResponse?.data || [];
   const totalUsage = apiResponse?.totalConsumption || 0;
 
@@ -73,7 +65,6 @@ export default function Consumption() {
   const projectedBill = totalUsage * price;
 
   // 6. Calculate Real Average Daily Usage
-  // We calculate the number of days selected, ensuring it's at least 1 to avoid division by zero.
   const daysDiff = Math.max(
     1,
     differenceInDays(
@@ -81,15 +72,10 @@ export default function Consumption() {
       parseISO(selectedRange.startDate),
     ) + 1, // +1 to include the start day itself
   );
-
   const avgDaily = totalUsage / daysDiff;
-  // const totalUsage = 0;
-  // const projectedBill = 0;
-  // const avgDaily = 0;
 
+  // 7. Fetch Table Data
   const [tablePage, setTablePage] = useState(1);
-
-  // URL includes 'page' parameter
   const tableUrl = user
     ? `/api/energy/history/table?uid=${user.uid}&startDate=${selectedRange.startTs}&endDate=${selectedRange.endTs}&page=${tablePage}&limit=10${selectedOutlet !== "total" ? `&outletId=${selectedOutlet}` : ""}`
     : null;
@@ -98,12 +84,13 @@ export default function Consumption() {
     tableUrl,
     fetcher,
   );
-  if (!user)
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin" />
-      </div>
-    );
+
+  // Combine loading states for the visual skeletons
+  const isGlobalLoading =
+    isLoadingProfile || isLoadingConfig || isHistoryLoading;
+
+  // FULL PAGE LOADER ONLY FOR AUTH CHECK
+  if (!user) return <Loading />;
 
   return (
     <div className="space-y-6 p-4 md:p-6 pb-20">
@@ -130,7 +117,7 @@ export default function Consumption() {
       <ConsumptionCard
         price={price}
         projectedBill={projectedBill}
-        isLoading={isLoading}
+        isLoading={isGlobalLoading} // <-- Passes combined loading state!
         avgDaily={avgDaily}
         selectedRange={selectedRange}
         totalUsage={totalUsage}
@@ -140,15 +127,15 @@ export default function Consumption() {
       <ConsumptionChart
         selectedRange={selectedRange}
         historyData={historyData}
-        isLoading={isLoading}
+        isLoading={isGlobalLoading} // <-- Passes combined loading state!
       />
 
       {/* 4. HISTORY TABLE */}
       <ConsumptionTable
         data={tableResponse?.data || []}
         price={price}
-        loading={tableLoading}
-        isAdmin={isAdmin} // <--- ADD THIS PROP
+        loading={tableLoading || isLoadingProfile} // <-- Shows Skeleton on load, Spinner on pagination
+        isAdmin={isAdmin}
         currentPage={tablePage}
         totalPages={tableResponse?.meta?.totalPages || 1}
         onPageChange={setTablePage}

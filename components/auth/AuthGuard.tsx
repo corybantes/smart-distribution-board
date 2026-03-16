@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 
-// Define paths that do NOT require login
 const PUBLIC_PATHS = ["/login", "/signup", "/", "/forgot-password", "/about"];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -13,17 +12,19 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!loading) {
-      // 1. If user is NOT logged in AND tries to access a protected page
-      if (!user && !PUBLIC_PATHS.includes(pathname)) {
-        router.push("/login");
-      }
+    if (loading) return; // Do nothing while loading
 
-      // 2. If user IS logged in AND tries to access login/signup
-      if (user && PUBLIC_PATHS.includes(pathname)) {
-        // Redirect to their dashboard
-        router.push(`/${user.uid}`);
-      }
+    const isPublicPath = PUBLIC_PATHS.includes(pathname);
+
+    // 1. If user is NOT logged in AND tries to access a protected page
+    if (!user && !isPublicPath) {
+      router.replace("/login"); // Use replace instead of push to avoid broken "Back" button history
+    }
+
+    // 2. If user IS logged in AND tries to access login/signup/home
+    if (user && isPublicPath) {
+      // Redirect to their unique dashboard
+      router.replace(`/${user.uid}`);
     }
   }, [user, loading, pathname, router]);
 
@@ -41,6 +42,5 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // If we are here, the checks passed. Render the page.
   return <>{children}</>;
 }

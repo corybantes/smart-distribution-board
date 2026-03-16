@@ -9,7 +9,6 @@ import BillingTopup from "../layout/billing/billing-topup";
 import BillingChart from "../layout/billing/billing-chart";
 import BillingCard from "../layout/billing/billing-card";
 import { fetcher } from "@/lib/utils";
-import Loading from "../layout/general/Loading";
 import BillingAdminChart from "../layout/billing/billing-admin-chart";
 
 export default function Billing() {
@@ -17,55 +16,47 @@ export default function Billing() {
   const [isTopUpOpen, setIsTopUpOpen] = useState(false);
   const [page, setPage] = useState(1);
 
-  // 1. Fetch User Profile (Now contains historicalBills!)
-  const { data: profile } = useSWR(
+  // 1. Fetch User Profile (Extract isLoading)
+  const { data: profile, isLoading: isLoadingProfile } = useSWR(
     user ? `/api/user?uid=${user.uid}` : null,
     fetcher,
   );
 
   const isAdmin = profile?.role === "admin";
 
-  // 2. Fetch Paginated Table Data (Transactions Ledger)
+  // 2. Fetch Paginated Table Data (Extract isLoading)
   const { data: billingTableData, isLoading: isTableLoading } = useSWR(
     user ? `/api/billing/table?uid=${user.uid}&page=${page}&limit=5` : null,
     fetcher,
   );
 
-  // 3. Fetch Tariff Rate (Required for accurate cost prediction)
-  const { data: config } = useSWR(
+  // 3. Fetch Tariff Rate (Extract isLoading)
+  const { data: config, isLoading: isLoadingConfig } = useSWR(
     user ? `/api/admin/config?uid=${user.uid}` : null,
     fetcher,
   );
 
-  // 4. Fetch Outlets for Top-Up Modal (Only needed for Admins)
-  const { data: outlets } = useSWR(
+  // 4. Fetch Outlets for Top-Up Modal (Extract isLoading)
+  const { data: outlets, isLoading: isLoadingOutlets } = useSWR(
     isAdmin && user ? `/api/admin/outlets?uid=${user.uid}` : null,
     fetcher,
   );
 
   // --- PREDICTION & GRAPH LOGIC ---
   const price = config?.pricePerKwh || 206.8;
-
-  // Extract the array directly from the profile.
-  // (Our Cron Job already saved these as Naira amounts, not kWh!)
   const historicalData = profile?.historicalBills || [];
-
-  // Admins don't get a predicted bill, tenants do.
   const predictedAmount = isAdmin ? 0 : predictNextBill(historicalData);
 
-  // Dynamically generate the Graph Data with Month Labels
   const graphData = historicalData.map((amount: number, index: number) => {
     const d = new Date();
-    // Count backwards based on the array length (e.g., 3 months ago, 2 months ago...)
     d.setMonth(d.getMonth() - (historicalData.length - index));
 
     return {
-      name: d.toLocaleString("default", { month: "short", year: "numeric" }), // e.g., "Jan 2026"
+      name: d.toLocaleString("default", { month: "short", year: "numeric" }),
       cost: amount,
     };
   });
 
-  // Add the prediction to the end of the graph for tenants
   if (!isAdmin && graphData.length > 0) {
     graphData.push({
       name: "Next Month",
@@ -74,8 +65,7 @@ export default function Billing() {
     });
   }
 
-  // Only show full-page loader on INITIAL load
-  if (!profile) return <Loading />;
+  // WE REMOVED THE FULL PAGE LOADER! 🚀
 
   return (
     <div className="flex flex-col flex-1 w-full gap-6 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-20">
@@ -85,26 +75,34 @@ export default function Billing() {
         <div className="flex w-full h-full">
           <BillingCard
             setIsTopUpOpen={setIsTopUpOpen}
-            // Passing a mocked object so we don't break your BillingCard's internal props
             billingData={{
-              balance: profile.balance || 0,
-              unbilledAmount: profile.unbilledAmount || 0,
+              balance: profile?.balance || 0,
+              unbilledAmount: profile?.unbilledAmount || 0,
             }}
             user={profile}
             pricePerKwh={price}
+            isLoading={isLoadingProfile} // <-- Added loading prop
           />
         </div>
 
-        {/* 2. PREDICTION CARD (Hidden for Admins as it doesn't apply to them) */}
+        {/* 2. DYNAMIC RIGHT CARD */}
         <div className="flex w-full h-full">
+          {/* Clever trick: If profile is loading, isAdmin is false, 
+            so the BillingChart skeleton shows by default. Once loaded, 
+            it swaps to the AdminChart if the user is an admin! 
+          */}
           {!isAdmin ? (
             <BillingChart
               historyAmounts={historicalData}
               graphData={graphData}
               predictedAmount={predictedAmount}
+              isLoading={isLoadingProfile || isLoadingConfig} // <-- Added loading prop
             />
           ) : (
-            <BillingAdminChart outlets={outlets?.data || outlets || []} />
+            <BillingAdminChart
+              outlets={outlets?.data || outlets || []}
+              isLoading={isLoadingOutlets} // <-- Added loading prop
+            />
           )}
         </div>
       </div>
@@ -116,7 +114,7 @@ export default function Billing() {
         currentPage={page}
         totalPages={billingTableData?.meta?.totalPages || 1}
         onPageChange={(newPage: number) => setPage(newPage)}
-        loading={isTableLoading}
+        loading={isTableLoading || isLoadingProfile} // <-- Added loading prop
       />
 
       {/* TOP-UP MODAL (Dialog) */}

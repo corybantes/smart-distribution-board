@@ -9,7 +9,14 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Card, CardContent, CardHeader } from "../../ui/card";
-import { ArrowUpDown, Calendar, Gauge, Loader2, Power } from "lucide-react";
+import {
+  ArrowUpDown,
+  Calendar,
+  Gauge,
+  Loader2,
+  Power,
+  Activity,
+} from "lucide-react";
 import {
   ChartContainer,
   ChartTooltip,
@@ -39,8 +46,6 @@ export default function ConsumptionChart({
   const [metrics, setMetrics] = useState<string>("power");
 
   // --- SMART DATE FORMATTER ---
-  // If the range is <= 24 hours (e.g., 'today', 'yesterday'), show Hours (14:00)
-  // If > 24 hours (e.g., '7days', 'this_month'), show Days (Mar 10)
   const formatXAxis = (dateStr: string) => {
     try {
       if (!dateStr) return "";
@@ -80,16 +85,29 @@ export default function ConsumptionChart({
   ];
 
   const chartConfig = {
-    usage: { label: "Energy (kWh)", color: "#3b82f6" }, // Blue
-    power: { label: "Real Power", color: "#f59e0b" }, // Orange
-    reactive: { label: "Reactive Power", color: "#ef4444" }, // Red
-    voltage: { label: "Voltage", color: "#8b5cf6" }, // Purple
-    current: { label: "Current", color: "#10b981" }, // Green
+    usage: { label: "Energy (kWh)", color: "#3b82f6" },
+    power: { label: "Real Power", color: "#f59e0b" },
+    reactive: { label: "Reactive Power", color: "#ef4444" },
+    voltage: { label: "Voltage", color: "#8b5cf6" },
+    current: { label: "Current", color: "#10b981" },
   } satisfies ChartConfig;
 
-  // Find the currently selected metric configuration
   const activeMetric =
     metricItems.find((m) => m.value === metrics) || metricItems[0];
+
+  // Check if we have data to display
+  const hasData = historyData && historyData.length > 0;
+
+  // Reusable Empty State UI
+  const EmptyChartState = () => (
+    <div className="h-75 w-full flex flex-col items-center justify-center text-muted-foreground rounded-lg border-2 border-dashed border-muted bg-muted/10">
+      <Activity className="h-10 w-10 mb-3 opacity-20" />
+      <p className="text-sm font-medium">No data available</p>
+      <p className="text-xs opacity-70 mt-1">
+        Try selecting a different date range.
+      </p>
+    </div>
+  );
 
   return (
     <>
@@ -106,6 +124,8 @@ export default function ConsumptionChart({
             <div className="h-75 w-full flex items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
+          ) : !hasData ? (
+            <EmptyChartState />
           ) : (
             <ChartContainer
               config={chartConfig}
@@ -121,8 +141,6 @@ export default function ConsumptionChart({
                     strokeDasharray="3 3"
                     opacity={0.5}
                   />
-
-                  {/* FIX: Formatted X-Axis */}
                   <XAxis
                     dataKey="date"
                     tickLine={false}
@@ -131,8 +149,6 @@ export default function ConsumptionChart({
                     tickFormatter={formatXAxis}
                     className="text-xs"
                   />
-
-                  {/* FIX: Added Y-Axis with units */}
                   <YAxis
                     tickLine={false}
                     axisLine={false}
@@ -141,7 +157,6 @@ export default function ConsumptionChart({
                     width={65}
                     className="text-xs font-medium"
                   />
-
                   <ChartTooltip
                     cursor={false}
                     content={<ChartTooltipContent indicator="dot" />}
@@ -187,6 +202,8 @@ export default function ConsumptionChart({
             <div className="h-75 w-full flex items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
+          ) : !hasData ? (
+            <EmptyChartState />
           ) : (
             <ChartContainer
               config={chartConfig}
@@ -202,7 +219,6 @@ export default function ConsumptionChart({
                     strokeDasharray="3 3"
                     opacity={0.5}
                   />
-
                   <XAxis
                     dataKey="date"
                     tickLine={false}
@@ -211,7 +227,6 @@ export default function ConsumptionChart({
                     tickFormatter={formatXAxis}
                     className="text-xs"
                   />
-
                   <YAxis
                     tickLine={false}
                     axisLine={false}
@@ -220,12 +235,10 @@ export default function ConsumptionChart({
                     width={65}
                     className="text-xs font-medium"
                   />
-
                   <ChartTooltip
                     cursor={false}
                     content={<ChartTooltipContent indicator="dot" />}
                   />
-
                   <Area
                     name={activeMetric.label.split(" ")[0]}
                     dataKey={activeMetric.dataKey}
@@ -235,7 +248,6 @@ export default function ConsumptionChart({
                     stroke={activeMetric.color}
                     strokeWidth={2}
                   />
-
                   {/* Render Reactive Power only if Power is selected */}
                   {metrics === "power" && (
                     <Area

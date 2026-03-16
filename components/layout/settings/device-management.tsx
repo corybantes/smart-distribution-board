@@ -16,15 +16,18 @@ import { toast } from "sonner";
 import { mutate } from "swr";
 import { useState } from "react";
 import { Outlet, SystemConfig } from "@/lib/utils";
+import { Skeleton } from "../../ui/skeleton"; // <-- Imported Skeleton
 
 export default function DeviceManagement({
   outlets,
   config,
   user,
+  isLoading = false, // <-- Added loading prop
 }: {
   outlets: Outlet[] | undefined;
   config: SystemConfig | undefined;
   user: any;
+  isLoading?: boolean;
 }) {
   // Form State for Adding Outlet
   const [newDevice, setNewDevice] = useState({ mac: "", name: "", email: "" });
@@ -120,6 +123,7 @@ export default function DeviceManagement({
                   setNewDevice({ ...newDevice, mac: e.target.value })
                 }
                 className="bg-background"
+                disabled={isLoading || isAdding}
               />
             </div>
             <div className="space-y-2 md:col-span-3">
@@ -133,6 +137,7 @@ export default function DeviceManagement({
                   setNewDevice({ ...newDevice, name: e.target.value })
                 }
                 className="bg-background"
+                disabled={isLoading || isAdding}
               />
             </div>
             <div className="space-y-2 md:col-span-4">
@@ -147,12 +152,13 @@ export default function DeviceManagement({
                   setNewDevice({ ...newDevice, email: e.target.value })
                 }
                 className="bg-background"
+                disabled={isLoading || isAdding}
               />
             </div>
             <div className="md:col-span-2">
               <Button
                 onClick={handleAddOutlet}
-                disabled={isAdding}
+                disabled={isLoading || isAdding} // <-- Disable while page is initially loading
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {isAdding ? (
@@ -177,7 +183,43 @@ export default function DeviceManagement({
         </CardHeader>
 
         <CardContent className="p-0">
-          {sortedOutlets.length > 0 ? (
+          {isLoading ? (
+            // --- SKELETON LOADING STATE ---
+            <div className="divide-y divide-border">
+              {Array(3)
+                .fill(0)
+                .map((_, i) => (
+                  <div
+                    key={`skeleton-device-${i}`}
+                    className="p-4 md:px-6 flex flex-col md:flex-row md:items-center gap-6"
+                  >
+                    <div className="flex flex-1 items-center gap-4">
+                      <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+                      <div className="space-y-2 min-w-0">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap md:flex-nowrap items-center gap-6 md:gap-8 justify-between md:justify-end">
+                      {isSingleMode && (
+                        <div className="flex flex-col items-start md:items-center space-y-2">
+                          <Skeleton className="h-2 w-20" />
+                          <Skeleton className="h-8 w-16" />
+                        </div>
+                      )}
+                      <div className="flex flex-col items-start md:items-end space-y-2">
+                        <Skeleton className="h-2 w-10" />
+                        <Skeleton className="h-4 w-12" />
+                      </div>
+                      <div className="flex flex-col items-end min-w-20">
+                        <Skeleton className="h-5 w-16 rounded-full" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : sortedOutlets.length > 0 ? (
+            // --- ACTUAL DATA ---
             <div className="divide-y divide-border">
               {sortedOutlets.map((outlet, index) => {
                 const status = outlet.status || "active";
@@ -200,8 +242,6 @@ export default function DeviceManagement({
                         <Zap className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
-                        {" "}
-                        {/* min-w-0 ensures truncation works */}
                         <h4 className="font-bold text-sm md:text-base leading-none mb-1.5 flex items-center gap-2">
                           {outlet.name}
                           <span className="text-[10px] font-mono font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
@@ -253,7 +293,7 @@ export default function DeviceManagement({
                       </div>
 
                       {/* Status Badge */}
-                      <div className="flex flex-col items-end min-w-[80px]">
+                      <div className="flex flex-col items-end min-w-20">
                         <Badge
                           variant="outline"
                           className={`uppercase text-[10px] font-bold tracking-wider px-2.5 py-0.5 ${
@@ -271,6 +311,7 @@ export default function DeviceManagement({
               })}
             </div>
           ) : (
+            // --- EMPTY STATE ---
             <div className="p-12 flex flex-col items-center justify-center text-center">
               <Server className="h-12 w-12 text-muted-foreground/30 mb-4" />
               <h3 className="text-lg font-bold">No Devices Found</h3>

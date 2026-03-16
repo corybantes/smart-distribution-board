@@ -3,23 +3,30 @@
 import { CreditCard, Plus, Zap, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "../../ui/skeleton"; // <-- Imported Skeleton
 
 export default function BillingCard({
   billingData,
   setIsTopUpOpen,
   user,
   pricePerKwh,
+  isLoading = false, // <-- Added loading prop
 }: {
   billingData: any;
   setIsTopUpOpen: (open: boolean) => void;
   user: any;
   pricePerKwh: number;
+  isLoading?: boolean;
 }) {
   const balance = billingData?.balance || 0;
   const isAdmin = user?.role === "admin";
 
-  // Health calculation: Let's make 10,000 NGN the 'Full' mark for the visual bar
-  const healthPercentage = Math.min(100, Math.max(5, (balance / 10000) * 100));
+  // Health calculation: Tenants consider 10k full, Admins (Master Grid) consider 50k full.
+  const maxThreshold = isAdmin ? 50000 : 10000;
+  const healthPercentage = Math.min(
+    100,
+    Math.max(5, (balance / maxThreshold) * 100),
+  );
   const isLowBalance = balance < 1000;
 
   return (
@@ -39,13 +46,17 @@ export default function BillingCard({
                   {isAdmin ? "Master Grid Wallet" : "Current Balance"}
                 </span>
               </div>
-              <div className="flex items-baseline gap-1 mt-2">
-                <span className="text-white text-4xl sm:text-5xl font-bold tracking-tighter">
-                  ₦
-                  {balance.toLocaleString(undefined, {
-                    minimumFractionDigits: 0,
-                  })}
-                </span>
+              <div className="flex items-baseline gap-1 mt-2 min-h-12">
+                {isLoading ? (
+                  <Skeleton className="h-12 w-48 bg-slate-800 rounded-lg" />
+                ) : (
+                  <span className="text-white text-4xl sm:text-5xl font-bold tracking-tighter">
+                    ₦
+                    {balance.toLocaleString(undefined, {
+                      minimumFractionDigits: 0,
+                    })}
+                  </span>
+                )}
               </div>
             </div>
             <div className="p-3 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-xl shadow-inner">
@@ -55,24 +66,35 @@ export default function BillingCard({
 
           {/* Unit Equivalent Section */}
           <div className="space-y-3">
-            <div className="flex justify-between items-end">
+            <div className="flex justify-between items-end min-h-8">
               <div className="space-y-1">
                 <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
                   Estimated Units
                 </p>
-                <div className="flex items-center gap-2 text-white font-mono text-xl font-bold">
-                  <Zap size={18} className="text-yellow-400 fill-yellow-400" />
-                  {(balance / pricePerKwh).toFixed(1)}{" "}
-                  <span className="text-sm font-sans font-normal text-slate-400">
-                    kWh
-                  </span>
-                </div>
+                {isLoading ? (
+                  <Skeleton className="h-7 w-24 bg-slate-800 rounded-md" />
+                ) : (
+                  <div className="flex items-center gap-2 text-white font-mono text-xl font-bold">
+                    <Zap
+                      size={18}
+                      className="text-yellow-400 fill-yellow-400"
+                    />
+                    {(balance / pricePerKwh).toFixed(1)}{" "}
+                    <span className="text-sm font-sans font-normal text-slate-400">
+                      kWh
+                    </span>
+                  </div>
+                )}
               </div>
-              <span
-                className={`text-[10px] font-bold px-2 py-1 rounded ${isLowBalance ? "bg-red-500/20 text-red-400" : "bg-emerald-500/20 text-emerald-400"}`}
-              >
-                {isLowBalance ? "LOW BALANCE" : "HEALTHY"}
-              </span>
+              {isLoading ? (
+                <Skeleton className="h-5 w-16 bg-slate-800 rounded-md" />
+              ) : (
+                <span
+                  className={`text-[10px] font-bold px-2 py-1 rounded ${isLowBalance ? "bg-red-500/20 text-red-400" : "bg-emerald-500/20 text-emerald-400"}`}
+                >
+                  {isLowBalance ? "LOW BALANCE" : "HEALTHY"}
+                </span>
+              )}
             </div>
 
             {/* Custom Progress Bar */}
@@ -83,14 +105,16 @@ export default function BillingCard({
                     ? "bg-linear-to-r from-red-600 to-red-400"
                     : "bg-linear-to-r from-blue-600 to-emerald-400"
                 }`}
-                style={{ width: `${healthPercentage}%` }}
+                style={{ width: isLoading ? "0%" : `${healthPercentage}%` }}
               ></div>
             </div>
           </div>
         </div>
 
         {/* Action Button: Exclusive to Admin */}
-        {isAdmin ? (
+        {isLoading ? (
+          <Skeleton className="relative z-10 mt-8 w-full h-14 bg-slate-800 rounded-2xl" />
+        ) : isAdmin ? (
           <Button
             onClick={() => setIsTopUpOpen(true)}
             className="relative z-10 mt-8 w-full bg-white text-slate-950 hover:bg-blue-50 transition-all font-bold h-14 rounded-2xl text-base shadow-[0_10px_20px_rgba(255,255,255,0.1)] group"

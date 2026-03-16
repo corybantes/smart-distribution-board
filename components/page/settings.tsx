@@ -54,26 +54,50 @@ export default function Settings() {
     }
   };
 
-  if (loadingConfig || loadingOutlets) {
+  // Only show the full-page loader while checking the user's role/auth status.
+  // This prevents the admin layout skeletons from flashing to unauthorized tenants.
+  if (!user || loadingProfile) {
     return <Loading />;
   }
 
   if (profile && profile.role !== "admin") {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <h1 className="text-2xl font-bold text-red-500">Unauthorized Access</h1>
+      <div className="flex flex-col items-center justify-center h-[80vh]">
+        <h1 className="text-2xl font-bold text-red-500 mb-2">
+          Unauthorized Access
+        </h1>
+        <p className="text-muted-foreground">
+          You do not have permission to view system settings.
+        </p>
       </div>
     );
   }
 
+  // WE REMOVED THE CONFIG/OUTLETS BLOCKER! 🚀
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 p-6 pb-20">
       {/* 1. MODE SELECTION */}
-      <ModeSelection config={config} updateConfig={updateConfig} />
+      <ModeSelection
+        config={config}
+        updateConfig={updateConfig}
+        isLoading={loadingConfig}
+      />
+
       {/* 2. GLOBAL CONFIGURATION */}
-      <GlobalConfiguration updateConfig={updateConfig} config={config} />
+      <GlobalConfiguration
+        updateConfig={updateConfig}
+        config={config}
+        isLoading={loadingConfig}
+      />
+
       {/* 3. DEVICE MANAGEMENT */}
-      <DeviceManagement outlets={outlets} config={config} user={user} />
+      <DeviceManagement
+        outlets={outlets}
+        config={config}
+        user={user}
+        isLoading={loadingOutlets || loadingConfig}
+      />
     </div>
   );
 }

@@ -1,14 +1,51 @@
+"use client";
+
 import { Layers, Users, Zap } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../ui/card";
 import { SystemConfig } from "@/lib/utils";
+import { Skeleton } from "../../ui/skeleton"; // <-- Added Skeleton import
 
 export default function ModeSelection({
   config,
   updateConfig,
+  isLoading = false, // <-- Added loading prop
 }: {
   config: SystemConfig | undefined;
   updateConfig: any;
+  isLoading?: boolean;
 }) {
+  // --- LOADING STATE ---
+  if (isLoading) {
+    return (
+      <section>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Render 2 identical skeleton cards */}
+          {[1, 2].map((i) => (
+            <Card
+              key={`mode-skeleton-${i}`}
+              className="shadow-sm border-border"
+            >
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between mb-4">
+                  {/* Icon Skeleton */}
+                  <Skeleton className="h-8 w-8 rounded-lg" />
+                </div>
+                {/* Title Skeleton */}
+                <Skeleton className="h-6 w-40 mb-1 mt-4" />
+                {/* Description Skeletons */}
+                <div className="space-y-2 mt-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-4/5" />
+                </div>
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  // --- ACTUAL DATA STATE ---
   return (
     <section>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -39,6 +76,7 @@ export default function ModeSelection({
             </CardDescription>
           </CardHeader>
         </Card>
+
         {/* Single User Card */}
         <Card
           className={`cursor-pointer transition-all hover:border-purple-300 ${

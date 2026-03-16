@@ -20,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TableLoadingSkeleton } from "@/components/layout/general/Loading"; // <-- Import the skeleton!
 
 interface ConsumptionTableProps {
   data: HistoryData[];
@@ -58,6 +59,15 @@ export default function ConsumptionTable({
     return "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200"; // Low/Idle
   };
 
+  // Check if it's the very first load (loading is true, but no data yet)
+  const isInitialLoad = loading && (!data || data.length === 0);
+
+  // Check if we are just switching pages (loading is true, but we already have old data on screen)
+  const isPaginating = loading && data && data.length > 0;
+
+  // Determine column count dynamically for the skeleton
+  const columnCount = isAdmin ? 4 : 3;
+
   return (
     <Card className="shadow-sm border-border">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -85,9 +95,10 @@ export default function ConsumptionTable({
       </CardHeader>
 
       <CardContent>
-        <div className="rounded-xl border border-border overflow-hidden relative min-h-100">
-          {loading && (
-            <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
+        <div className="rounded-xl border border-border overflow-hidden relative min-h-75">
+          {/* Overlay Spinner ONLY shows during pagination */}
+          {isPaginating && (
+            <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] z-10 flex items-center justify-center">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
           )}
@@ -102,7 +113,11 @@ export default function ConsumptionTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data && data.length > 0 ? (
+              {isInitialLoad ? (
+                // --- SKELETON LOADING ROWS ---
+                <TableLoadingSkeleton rows={5} columns={columnCount} />
+              ) : data && data.length > 0 ? (
+                // --- ACTUAL DATA ROWS ---
                 data.map((item, index) => {
                   const usage = item.usage || 0;
                   const cost = usage * price;
@@ -154,19 +169,15 @@ export default function ConsumptionTable({
                   );
                 })
               ) : (
+                // --- EMPTY STATE ---
                 <TableRow>
-                  <TableCell
-                    colSpan={isAdmin ? 4 : 3}
-                    className="h-64 text-center"
-                  >
-                    {!loading && (
-                      <div className="flex flex-col items-center justify-center text-muted-foreground">
-                        <Zap size={32} className="mb-2 opacity-20" />
-                        <p className="text-sm font-medium">
-                          No activity recorded for this period.
-                        </p>
-                      </div>
-                    )}
+                  <TableCell colSpan={columnCount} className="h-64 text-center">
+                    <div className="flex flex-col items-center justify-center text-muted-foreground">
+                      <Zap size={32} className="mb-2 opacity-20" />
+                      <p className="text-sm font-medium">
+                        No activity recorded for this period.
+                      </p>
+                    </div>
                   </TableCell>
                 </TableRow>
               )}

@@ -13,9 +13,8 @@ import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
-// ... (Interfaces remain the same) ...
 interface UserData {
-  role: "admin" | "user";
+  role: "admin" | "tenant"; // FIX 1: Updated to match your database roles
   outletId?: string;
   email: string;
   photoURL?: string;
@@ -60,30 +59,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          // User is signed in
           const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
 
           if (userDoc.exists()) {
             const data = userDoc.data() as UserData;
             setUserData(data);
 
-            if (data.role === "user" && data.outletId) {
+            if (data.role === "tenant" && data.outletId) {
               setCurrentOutletId(data.outletId);
             }
           }
           setUser(firebaseUser);
         } else {
-          // User is signed out
           setUser(null);
           setUserData(null);
           setCurrentOutletId(null);
         }
       } catch (error) {
         console.error("Auth Context Error:", error);
-        // Optional: If error happens, treat as logged out to unblock UI
         setUser(null);
       } finally {
-        // CRITICAL: This ensures loading ALWAYS turns false, preventing the infinite loop
         setLoading(false);
       }
     });
@@ -107,7 +102,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentOutletId,
       }}
     >
-      {!loading && children}
+      {/* FIX 2: Let children render immediately so AuthGuard can show its spinner */}
+      {children}
     </AuthContext.Provider>
   );
 }

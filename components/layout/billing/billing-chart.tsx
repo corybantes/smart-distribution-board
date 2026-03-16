@@ -1,8 +1,9 @@
 "use client";
 
-import { TrendingUp, Sparkles } from "lucide-react";
+import { TrendingUp, Sparkles, Loader2 } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { Card, CardContent, CardHeader } from "../../ui/card";
+import { Skeleton } from "../../ui/skeleton"; // <-- Added Skeleton import
 import {
   AreaChart,
   Area,
@@ -29,10 +30,12 @@ export default function BillingChart({
   graphData,
   predictedAmount,
   historyAmounts,
+  isLoading, // <-- Added loading prop
 }: {
   graphData: any[];
   predictedAmount: number;
   historyAmounts: any[];
+  isLoading?: boolean;
 }) {
   return (
     <div className="flex-1 w-full h-full">
@@ -63,20 +66,26 @@ export default function BillingChart({
               >
                 Projected Next Month
               </Badge>
-              <span className="text-3xl sm:text-4xl font-bold tracking-tighter text-foreground">
-                ₦{Math.round(predictedAmount).toLocaleString()}
-              </span>
+              {/* Header Skeleton for the predicted amount */}
+              {isLoading ? (
+                <Skeleton className="h-10 w-32 mt-1" />
+              ) : (
+                <span className="text-3xl sm:text-4xl font-bold tracking-tighter text-foreground">
+                  ₦{Math.round(predictedAmount).toLocaleString()}
+                </span>
+              )}
             </div>
           </div>
-
-          {/* <p className="text-xs text-muted-foreground border-b pb-4">
-            Forecast generated based on your historical usage trend (
-            {historyAmounts?.length || 0} data points).
-          </p> */}
         </CardHeader>
 
         <CardContent className="px-2 sm:px-6 pb-6 pt-4 flex-1 relative z-10">
-          {graphData && graphData.length > 0 ? (
+          {isLoading ? (
+            // --- LOADING STATE ---
+            <div className="h-62.5 sm:h-75 w-full flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : graphData && graphData.length > 0 ? (
+            // --- ACTUAL CHART ---
             <ChartContainer
               config={chartConfig}
               className="aspect-auto h-62.5 sm:h-75 w-full"
@@ -110,7 +119,6 @@ export default function BillingChart({
                     }}
                   />
 
-                  {/* FIX: Added proper Y-Axis with currency formatting */}
                   <YAxis
                     tickLine={false}
                     axisLine={false}
@@ -128,7 +136,7 @@ export default function BillingChart({
                   <Area
                     dataKey="cost"
                     type="monotone"
-                    fill="url(#colorCost)" // Uses gradient defined below
+                    fill="url(#colorCost)"
                     fillOpacity={1}
                     stroke="#8b5cf6" // Violet-500
                     strokeWidth={2}
@@ -149,9 +157,13 @@ export default function BillingChart({
               </ResponsiveContainer>
             </ChartContainer>
           ) : (
-            <div className="h-full w-full flex flex-col items-center justify-center text-muted-foreground opacity-50">
-              <TrendingUp className="h-10 w-10 mb-2" />
-              <p className="text-sm">Not enough data to generate forecast.</p>
+            // --- EMPTY STATE (Updated to match ConsumptionChart) ---
+            <div className="h-62.5 sm:h-75 w-full flex flex-col items-center justify-center text-muted-foreground rounded-lg border-2 border-dashed border-muted bg-muted/10 p-6">
+              <TrendingUp className="h-10 w-10 mb-3 opacity-20" />
+              <p className="text-sm font-medium">Not enough data</p>
+              <p className="text-xs opacity-70 mt-1">
+                Forecast requires at least 1 month of history.
+              </p>
             </div>
           )}
         </CardContent>
