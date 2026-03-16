@@ -10,7 +10,7 @@ import BillingChart from "../layout/billing/billing-chart";
 import BillingCard from "../layout/billing/billing-card";
 import { fetcher } from "@/lib/utils";
 import Loading from "../layout/general/Loading";
-import { Wallet } from "lucide-react";
+import BillingAdminChart from "../layout/billing/billing-admin-chart";
 
 export default function Billing() {
   const { user } = useAuth();
@@ -96,15 +96,17 @@ export default function Billing() {
         </div>
 
         {/* 2. PREDICTION CARD (Hidden for Admins as it doesn't apply to them) */}
-        {!isAdmin && (
-          <div className="flex w-full h-full">
+        <div className="flex w-full h-full">
+          {!isAdmin ? (
             <BillingChart
               historyAmounts={historicalData}
               graphData={graphData}
               predictedAmount={predictedAmount}
             />
-          </div>
-        )}
+          ) : (
+            <BillingAdminChart outlets={outlets?.data || outlets || []} />
+          )}
+        </div>
       </div>
 
       {/* 3. HISTORY TABLE */}

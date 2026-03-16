@@ -20,20 +20,45 @@ export async function GET(request: Request) {
 
     // 1. If the user is an Admin, grab their configured outlets
     if (userData?.role === "admin") {
-      const outlets = userData.outletsConfig || [];
+      const outletsConfig = userData.outletsConfig || [];
+      const smartDbId = userData.smartDbId;
 
-      // Format the output so the frontend components (like the Top-Up dropdown)
-      // get exactly the 'id' and 'name' properties they expect.
-      const formattedOutlets = outlets.map((o: any) => ({
-        id: o.id.toString(),
-        name: o.label || `Outlet ${o.id}`,
-        assignedEmail: o.email || null,
-      }));
+      let tenantsData: any[] = [];
+
+      // 2. Fetch the LIVE tenant documents to get their current wallet balances
+      if (smartDbId) {
+        const tenantsSnap = await adminDb
+          .collection("users")
+          .where("role", "==", "tenant")
+          .where("smartDbId", "==", smartDbId)
+          .get();
+
+        tenantsData = tenantsSnap.docs.map((doc) => doc.data());
+      }
+
+      // 3. Merge the live tenant data with the Admin's outlet configuration
+      const formattedOutlets = outletsConfig.map((o: any) => {
+        // Find the specific tenant assigned to this outlet ID
+        const activeTenant = tenantsData.find(
+          (t) => String(t.outletId) === String(o.id),
+        );
+
+        return {
+          id: o.id.toString(),
+          name: o.label || `Outlet ${o.id}`,
+          assignedEmail: o.email || null,
+          // Inject the live data for the Admin Chart!
+          tenantName: activeTenant
+            ? `${activeTenant.firstName} ${activeTenant.lastName}`.trim()
+            : null,
+          tenantBalance: activeTenant ? activeTenant.balance || 0 : 0,
+        };
+      });
 
       return NextResponse.json(formattedOutlets);
     }
 
-    // 2. If the user is a Tenant, they shouldn't be fetching the master outlet list anyway
+    // 4. If the user is a Tenant, they shouldn't be fetching the master outlet list anyway
     return NextResponse.json([], { status: 403 });
   } catch (error: any) {
     console.error("Outlets API Error:", error);

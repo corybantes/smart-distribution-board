@@ -23,7 +23,7 @@ export default function BillingCard({
   const isLowBalance = balance < 1000;
 
   return (
-    <div className="flex border w-full">
+    <div className="flex border w-full rounded-xl">
       <Card className="relative overflow-hidden bg-slate-950 border-none shadow-2xl min-h-80 flex flex-col justify-between p-6 sm:p-8 w-full">
         {/* Background Visual Flair: Animated Blue Glows */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 rounded-full blur-[80px] -mr-20 -mt-20 pointer-events-none animate-pulse"></div>
@@ -36,7 +36,7 @@ export default function BillingCard({
               <div className="flex items-center gap-2 text-blue-400/80">
                 <Wallet size={16} />
                 <span className="text-[10px] uppercase font-bold tracking-[0.2em]">
-                  Current Balance
+                  {isAdmin ? "Master Grid Wallet" : "Current Balance"}
                 </span>
               </div>
               <div className="flex items-baseline gap-1 mt-2">

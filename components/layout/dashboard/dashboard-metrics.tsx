@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity, Wallet, Zap } from "lucide-react";
+import { Activity, Wallet, Zap, BarChart3 } from "lucide-react";
 import WeatherCard from "./weather-card";
 import { UserProfile } from "@/lib/utils";
 
@@ -20,19 +20,24 @@ export default function DashboardMetrics({
   totalCost,
   predictedCost,
   isLoading,
-  selectedRange, // <-- NEW PROP
+  selectedRange,
 }: {
   profile: UserProfile | undefined;
   totalUsage: number;
   totalCost: number;
   predictedCost: number;
   isLoading: boolean;
-  selectedRange: any; // <-- NEW PROP
+  selectedRange: any;
 }) {
   const isAdmin = profile?.role === "admin";
-
-  // Safely grab the label (e.g., "Today", "Last 7 Days")
   const rangeLabel = selectedRange?.label || "selected period";
+
+  // Calculate Average Daily Usage dynamically for the Admin card
+  const daysInRange = Math.max(
+    1,
+    (selectedRange.endTs - selectedRange.startTs) / 86400,
+  );
+  const avgDailyUsage = totalUsage / daysInRange;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 px-4 lg:px-6">
@@ -96,34 +101,64 @@ export default function DashboardMetrics({
         </CardContent>
       </Card>
 
-      {/* 3. Predicted Bill Card */}
-      <Card className="shadow-sm border-border">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-3 text-sm text-muted-foreground font-medium uppercase tracking-wider">
-            <div className="p-1.5 bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 rounded-md">
-              <Activity size={16} />
-            </div>
-            Predicted Bill
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <CardLoadingSkeleton />
-          ) : (
-            <div>
-              <span className="text-3xl font-bold tracking-tight">
-                ₦
-                {predictedCost.toLocaleString(undefined, {
-                  maximumFractionDigits: 0,
-                })}
-              </span>
-              <p className="text-[11px] text-orange-600/80 dark:text-orange-400/80 mt-1.5 font-medium">
-                Projected for current month
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* 3. CONDITIONAL CARD (Predicted Bill for Tenants, Avg Daily Load for Admins) */}
+      {!isAdmin ? (
+        <Card className="shadow-sm border-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-3 text-sm text-muted-foreground font-medium uppercase tracking-wider">
+              <div className="p-1.5 bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 rounded-md">
+                <Activity size={16} />
+              </div>
+              Predicted Bill
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <CardLoadingSkeleton />
+            ) : (
+              <div>
+                <span className="text-3xl font-bold tracking-tight">
+                  ₦
+                  {predictedCost.toLocaleString(undefined, {
+                    maximumFractionDigits: 0,
+                  })}
+                </span>
+                <p className="text-[11px] text-orange-600/80 dark:text-orange-400/80 mt-1.5 font-medium">
+                  Projected for current month
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="shadow-sm border-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-3 text-sm text-muted-foreground font-medium uppercase tracking-wider">
+              <div className="p-1.5 bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400 rounded-md">
+                <BarChart3 size={16} />
+              </div>
+              Avg. Daily Load
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <CardLoadingSkeleton />
+            ) : (
+              <div>
+                <span className="text-3xl font-bold tracking-tight">
+                  {avgDailyUsage.toFixed(1)}
+                </span>
+                <span className="text-sm font-medium text-muted-foreground ml-1">
+                  kWh/day
+                </span>
+                <p className="text-[11px] text-purple-600/80 dark:text-purple-400/80 mt-1.5 font-medium">
+                  Burn rate across all outlets
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
