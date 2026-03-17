@@ -75,7 +75,25 @@ export interface SystemConfig {
   pricePerKwh: number;
 }
 
-export const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { auth } from "@/lib/firebase";
+
+export const fetcher = async (url: string) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not authenticated");
+
+  const token = await user.getIdToken();
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch data");
+  }
+  return res.json();
+};
 
 import {
   eachDayOfInterval,

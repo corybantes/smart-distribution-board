@@ -22,6 +22,7 @@ import {
 } from "../../ui/select";
 import { useState } from "react";
 import { toast } from "sonner";
+import { auth } from "@/lib/firebase"; // <-- 1. Import auth
 
 export default function BillingTopup({
   user,
@@ -49,20 +50,23 @@ export default function BillingTopup({
         (o) => o.id.toString() === selectedOutlet,
       );
 
+      // 2. Grab the secure token!
+      const token = await auth.currentUser?.getIdToken();
+
       const res = await fetch("/api/billing", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           adminId: user?.uid,
           outletId: selectedOutlet,
-          // FIX 1: We send the email since we know the outlet has it, letting backend find the user
           targetEmail: targetOutlet?.assignedEmail,
-          // FIX 2: Force the amount to be a clean Number, not a String
           amount: Number(topUpAmount),
         }),
       });
 
-      // FIX 3: Actually read the error from the backend so we know WHY it failed
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || "Payment processing failed");
@@ -94,18 +98,18 @@ export default function BillingTopup({
     <Dialog open={isTopUpOpen} onOpenChange={setIsTopUpOpen}>
       <DialogContent className="sm:max-w-106.25 p-0 overflow-hidden border-none shadow-2xl">
         {/* Sleek FinTech Header */}
-        <div className="bg-slate-950 px-6 py-8 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-          <DialogHeader className="relative z-10">
-            <DialogTitle className="text-white text-2xl flex items-center gap-2">
-              <Wallet className="text-blue-400" />
-              Allocate Credits
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Transfer funds to a specific hardware endpoint.
-            </DialogDescription>
-          </DialogHeader>
-        </div>
+        {/* <div className="bg-slate-950 px-6 py-8 relative overflow-hidden"> */}
+        {/* <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div> */}
+        <DialogHeader className="px-6 pt-8">
+          <DialogTitle className="text-2xl flex items-center gap-2">
+            <Wallet className="text-blue-500" />
+            Allocate Credits
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            Transfer funds to a specific hardware endpoint.
+          </DialogDescription>
+        </DialogHeader>
+        {/* </div> */}
 
         {/* Modal Body */}
         <div className="px-6 py-6 space-y-6 bg-background">

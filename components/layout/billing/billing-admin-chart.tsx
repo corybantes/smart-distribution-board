@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Loader2 } from "lucide-react"; // <-- Added Loader2
+import { Users, Loader2 } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -19,7 +19,7 @@ import {
 
 export default function BillingAdminChart({
   outlets,
-  isLoading, // <-- Added loading prop
+  isLoading,
 }: {
   outlets: any[];
   isLoading?: boolean;

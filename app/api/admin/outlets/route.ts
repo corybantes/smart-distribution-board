@@ -1,15 +1,36 @@
 import { NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, adminAuth } from "@/lib/firebase-admin";
+
+// Helper function to verify the token and get the UID
+async function verifyAuth(request: Request) {
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return {
+      uid: null,
+      error: "Missing or invalid authorization header",
+      status: 401,
+    };
+  }
+
+  const idToken = authHeader.split("Bearer ")[1];
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    return { uid: decodedToken.uid, error: null, status: 200 };
+  } catch (error) {
+    return { uid: null, error: "Invalid or expired token", status: 401 };
+  }
+}
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const uid = searchParams.get("uid");
+  // 1. Authenticate the request securely
+  const { uid, error, status } = await verifyAuth(request);
 
-  if (!uid) {
-    return NextResponse.json({ error: "UID required" }, { status: 400 });
+  if (error || !uid) {
+    return NextResponse.json({ error }, { status });
   }
 
   try {
+    // 2. Use the verified UID from the token, NEVER from the URL query params
     const userDoc = await adminDb.collection("users").doc(uid).get();
 
     if (!userDoc.exists) {
@@ -18,48 +39,52 @@ export async function GET(request: Request) {
 
     const userData = userDoc.data();
 
-    // 1. If the user is an Admin, grab their configured outlets
-    if (userData?.role === "admin") {
-      const outletsConfig = userData.outletsConfig || [];
-      const smartDbId = userData.smartDbId;
-
-      let tenantsData: any[] = [];
-
-      // 2. Fetch the LIVE tenant documents to get their current wallet balances
-      if (smartDbId) {
-        const tenantsSnap = await adminDb
-          .collection("users")
-          .where("role", "==", "tenant")
-          .where("smartDbId", "==", smartDbId)
-          .get();
-
-        tenantsData = tenantsSnap.docs.map((doc) => doc.data());
-      }
-
-      // 3. Merge the live tenant data with the Admin's outlet configuration
-      const formattedOutlets = outletsConfig.map((o: any) => {
-        // Find the specific tenant assigned to this outlet ID
-        const activeTenant = tenantsData.find(
-          (t) => String(t.outletId) === String(o.id),
-        );
-
-        return {
-          id: o.id.toString(),
-          name: o.label || `Outlet ${o.id}`,
-          assignedEmail: o.email || null,
-          // Inject the live data for the Admin Chart!
-          tenantName: activeTenant
-            ? `${activeTenant.firstName} ${activeTenant.lastName}`.trim()
-            : null,
-          tenantBalance: activeTenant ? activeTenant.balance || 0 : 0,
-        };
-      });
-
-      return NextResponse.json(formattedOutlets);
+    // 3. Strict Role-Based Access Control (RBAC)
+    if (userData?.role !== "admin") {
+      // If the user is a Tenant, immediately reject. They shouldn't be fetching the master list.
+      return NextResponse.json(
+        { error: "Unauthorized: Admins only" },
+        { status: 403 },
+      );
     }
 
-    // 4. If the user is a Tenant, they shouldn't be fetching the master outlet list anyway
-    return NextResponse.json([], { status: 403 });
+    // 4. Admin is verified. Grab their configured outlets.
+    const outletsConfig = userData.outletsConfig || [];
+    const smartDbId = userData.smartDbId;
+
+    let tenantsData: any[] = [];
+
+    // 5. Fetch the LIVE tenant documents to get their current wallet balances
+    if (smartDbId) {
+      const tenantsSnap = await adminDb
+        .collection("users")
+        .where("role", "==", "tenant")
+        .where("smartDbId", "==", smartDbId)
+        .get();
+
+      tenantsData = tenantsSnap.docs.map((doc) => doc.data());
+    }
+
+    // 6. Merge the live tenant data with the Admin's outlet configuration
+    const formattedOutlets = outletsConfig.map((o: any) => {
+      // Find the specific tenant assigned to this outlet ID
+      const activeTenant = tenantsData.find(
+        (t) => String(t.outletId) === String(o.id),
+      );
+
+      return {
+        id: o.id.toString(),
+        name: o.label || `Outlet ${o.id}`,
+        assignedEmail: o.email || null,
+        // Inject the live data for the Admin Chart!
+        tenantName: activeTenant
+          ? `${activeTenant.firstName} ${activeTenant.lastName}`.trim()
+          : null,
+        tenantBalance: activeTenant ? activeTenant.balance || 0 : 0,
+      };
+    });
+
+    return NextResponse.json(formattedOutlets);
   } catch (error: any) {
     console.error("Outlets API Error:", error);
     return NextResponse.json(

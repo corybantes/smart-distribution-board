@@ -1,10 +1,37 @@
 import { NextResponse } from "next/server";
-import { adminRtdb, adminDb } from "@/lib/firebase-admin";
+import { adminRtdb, adminDb, adminAuth } from "@/lib/firebase-admin";
+
+// Helper function to verify the token and get the UID
+async function verifyAuth(request: Request) {
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return {
+      uid: null,
+      error: "Missing or invalid authorization header",
+      status: 401,
+    };
+  }
+
+  const idToken = authHeader.split("Bearer ")[1];
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    return { uid: decodedToken.uid, error: null, status: 200 };
+  } catch (error) {
+    return { uid: null, error: "Invalid or expired token", status: 401 };
+  }
+}
 
 export async function GET(request: Request) {
+  // 1. Authenticate the request securely
+  const { uid, error, status } = await verifyAuth(request);
+  if (error || !uid) {
+    return NextResponse.json({ error }, { status });
+  }
+
   const { searchParams } = new URL(request.url);
-  const uid = searchParams.get("uid");
-  const outletId = searchParams.get("outletId");
+
+  // We no longer extract 'uid' from searchParams!
+  let outletId = searchParams.get("outletId");
 
   const startParam = searchParams.get("startDate");
   const endParam = searchParams.get("endDate");
@@ -12,14 +39,28 @@ export async function GET(request: Request) {
   const page = parseInt(searchParams.get("page") || "0");
   const limit = parseInt(searchParams.get("limit") || "10");
 
-  if (!uid)
-    return NextResponse.json({ error: "UID required" }, { status: 400 });
-
   try {
+    // 2. Fetch User Profile using the SECURE token UID
     const userDoc = await adminDb.collection("users").doc(uid).get();
-    const smartDbId = userDoc.data()?.smartDbId;
-    if (!smartDbId)
+
+    if (!userDoc.exists) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const userData = userDoc.data()!;
+    const smartDbId = userData.smartDbId;
+    const role = userData.role;
+
+    if (!smartDbId) {
       return NextResponse.json({ error: "No device linked" }, { status: 404 });
+    }
+
+    // 3. SECURITY OVERRIDE: Prevent Tenant Data Leaks
+    // If a tenant tries to omit the outletId or guess another tenant's ID,
+    // we force it to their exact assigned ID.
+    if (role === "tenant") {
+      outletId = userData.outletId;
+    }
 
     const now = Math.floor(Date.now() / 1000);
     const start = startParam ? parseInt(startParam) : now - 86400;
@@ -53,25 +94,23 @@ export async function GET(request: Request) {
     let previousEMap: Record<string, number> = {};
 
     // --- AGGREGATION MAPS ---
-    // We create separate maps for the Chart (Combined sums) and Table (Flattened by Outlet)
     const chartAggregatedMap: Record<string, any> = {};
     const tableAggregatedMap: Record<string, any> = {};
 
     dataPoints.forEach((entry) => {
-      // 1. Create the Time Bucket (Truncate the date to either the Hour or the Day)
+      // Create the Time Bucket
       const d = new Date(entry.timestamp * 1000);
       if (isDailyAggregation) {
-        d.setHours(0, 0, 0, 0); // Round down to start of the Day
+        d.setHours(0, 0, 0, 0);
       } else {
-        d.setMinutes(0, 0, 0); // Round down to start of the Hour
+        d.setMinutes(0, 0, 0);
       }
       const timeBucketStr = d.toISOString();
 
-      // 2. Calculate the Raw Usage for this specific tick
       let totalUsageThisTick = 0;
       let breakdown: any[] = [];
 
-      if (outletId) {
+      if (outletId && outletId !== "total") {
         let currentE = Number(entry[`O${outletId}`]?.E) || 0;
         let usage = 0;
         if (
@@ -105,14 +144,14 @@ export async function GET(request: Request) {
 
       totalPeriodUsage += totalUsageThisTick;
 
-      // 3. Add to CHART Aggregation (Groups everything purely by Time)
+      // Add to CHART Aggregation
       if (!chartAggregatedMap[timeBucketStr]) {
         chartAggregatedMap[timeBucketStr] = { date: timeBucketStr, usage: 0 };
       }
       chartAggregatedMap[timeBucketStr].usage += totalUsageThisTick;
 
-      // 4. Add to TABLE Aggregation (Groups by Time AND Outlet)
-      if (outletId) {
+      // Add to TABLE Aggregation
+      if (outletId && outletId !== "total") {
         const tableKey = timeBucketStr;
         if (!tableAggregatedMap[tableKey]) {
           tableAggregatedMap[tableKey] = {

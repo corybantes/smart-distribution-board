@@ -3,7 +3,7 @@
 import { TrendingUp, Sparkles, Loader2 } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { Card, CardContent, CardHeader } from "../../ui/card";
-import { Skeleton } from "../../ui/skeleton"; // <-- Added Skeleton import
+import { Skeleton } from "../../ui/skeleton";
 import {
   AreaChart,
   Area,
@@ -22,7 +22,7 @@ import {
 const chartConfig = {
   cost: {
     label: "Predicted Cost",
-    color: "#8b5cf6", // Tailwind violet-500 for the AI aesthetic
+    color: "#8b5cf6",
   },
 } satisfies ChartConfig;
 
@@ -30,7 +30,7 @@ export default function BillingChart({
   graphData,
   predictedAmount,
   historyAmounts,
-  isLoading, // <-- Added loading prop
+  isLoading,
 }: {
   graphData: any[];
   predictedAmount: number;
@@ -123,7 +123,7 @@ export default function BillingChart({
                     tickLine={false}
                     axisLine={false}
                     tickMargin={0}
-                    width={80} // Wide enough to fit "₦ 10,000"
+                    width={80}
                     tickFormatter={(val) => `₦${val.toLocaleString()}`}
                     className="text-[10px] sm:text-xs font-medium text-muted-foreground"
                   />
@@ -138,7 +138,7 @@ export default function BillingChart({
                     type="monotone"
                     fill="url(#colorCost)"
                     fillOpacity={1}
-                    stroke="#8b5cf6" // Violet-500
+                    stroke="#8b5cf6"
                     strokeWidth={2}
                   />
 

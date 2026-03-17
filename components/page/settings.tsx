@@ -34,7 +34,8 @@ export default function Settings() {
   const updateConfig = async (updates: Partial<SystemConfig>) => {
     if (!user) return;
 
-    // Optimistic UI Update
+    const token = await auth.currentUser?.getIdToken();
+
     mutate(
       `/api/admin/config?uid=${user.uid}`,
       { ...config, ...updates },
@@ -44,7 +45,10 @@ export default function Settings() {
     try {
       await fetch("/api/admin/config", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ uid: user.uid, ...updates }),
       });
       toast.success("Settings saved");
@@ -54,8 +58,6 @@ export default function Settings() {
     }
   };
 
-  // Only show the full-page loader while checking the user's role/auth status.
-  // This prevents the admin layout skeletons from flashing to unauthorized tenants.
   if (!user || loadingProfile) {
     return <Loading />;
   }

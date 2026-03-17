@@ -3,14 +3,14 @@
 import { CreditCard, Plus, Zap, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Skeleton } from "../../ui/skeleton"; // <-- Imported Skeleton
+import { Skeleton } from "../../ui/skeleton";
 
 export default function BillingCard({
   billingData,
   setIsTopUpOpen,
   user,
   pricePerKwh,
-  isLoading = false, // <-- Added loading prop
+  isLoading = false,
 }: {
   billingData: any;
   setIsTopUpOpen: (open: boolean) => void;

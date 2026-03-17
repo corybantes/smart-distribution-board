@@ -56,7 +56,6 @@ export default function BillingTable({
     if (!uid) return;
     setIsExporting(true);
 
-    // Optional: Show a loading toast while generating a large CSV
     const toastId = toast.loading("Preparing your export...");
 
     try {
@@ -93,7 +92,6 @@ export default function BillingTable({
       link.click();
       document.body.removeChild(link);
 
-      // Trigger Success Toast!
       toast.dismiss(toastId);
       toast.success("Export Successful! Your ledger has been downloaded.");
     } catch (error) {
@@ -105,10 +103,8 @@ export default function BillingTable({
     }
   };
 
-  // Check if it's the very first load (loading is true, but no data yet)
   const isInitialLoad = loading && (!billingData || billingData.length === 0);
 
-  // Check if we are just switching pages (loading is true, but we already have old data on screen)
   const isPaginating = loading && billingData && billingData.length > 0;
 
   return (

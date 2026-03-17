@@ -1,23 +1,9 @@
 "use client";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import {
-  Cpu,
-  Thermometer,
-  Volume2,
-  Clock,
-  Loader2,
-  Zap,
-  Activity,
-} from "lucide-react";
+import { Zap, Activity } from "lucide-react";
 
 export default function HardwareAdminList({
   energyData,
@@ -44,79 +30,9 @@ export default function HardwareAdminList({
     }
   };
 
-  const isAlarmActive = energyData?.buzzer === 1 || energyData?.buzzer === true;
-  const currentTemp = energyData?.temperature || 0;
-
   return (
     <div className="px-4 lg:px-6 mt-6 space-y-6">
-      {/* 1. SYSTEM TELEMETRY HEADER (Glassmorphism Style) */}
-      {/* <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-1">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10" />
-        <div className="relative flex flex-col md:flex-row items-center justify-between gap-4 rounded-xl bg-slate-900/90 px-6 py-4 backdrop-blur-md border border-slate-800">
-          <div className="flex items-center gap-4">
-            <div className="rounded-full bg-blue-500/20 p-2.5 text-blue-400">
-              <Cpu size={24} />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white tracking-tight">
-                Hardware Control Center
-              </h3>
-              <p className="text-xs text-slate-400 font-mono flex items-center gap-1.5">
-                <Clock size={12} /> Sync:{" "}
-                {energyData?.timestamp
-                  ? new Date(energyData.timestamp * 1000).toLocaleTimeString()
-                  : "..."}
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
-              </p>
-            </div>
-          </div>
-
-          {!isLoading && (
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3 rounded-lg bg-slate-800/50 px-4 py-2 border border-slate-700">
-                <Thermometer
-                  size={18}
-                  className={
-                    currentTemp > 45 ? "text-red-400" : "text-emerald-400"
-                  }
-                />
-                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase text-slate-500 font-bold">
-                    Temp
-                  </span>
-                  <span className="text-sm font-mono font-bold text-white">
-                    {currentTemp}°C
-                  </span>
-                </div>
-              </div>
-              <div
-                className={`flex items-center gap-3 rounded-lg px-4 py-2 border ${isAlarmActive ? "bg-red-500/10 border-red-500/50" : "bg-slate-800/50 border-slate-700"}`}
-              >
-                <Volume2
-                  size={18}
-                  className={
-                    isAlarmActive
-                      ? "text-red-400 animate-bounce"
-                      : "text-slate-500"
-                  }
-                />
-                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase text-slate-500 font-bold">
-                    Buzzer
-                  </span>
-                  <span
-                    className={`text-sm font-bold ${isAlarmActive ? "text-red-400" : "text-slate-400"}`}
-                  >
-                    {isAlarmActive ? "ALARM" : "SILENT"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div> */}
-
-      {/* 2. OUTLET GRID (Modern Hardware Cards) */}
+      {/* OUTLET GRID (Modern Hardware Cards) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {isLoading
           ? Array(4)

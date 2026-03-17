@@ -6,7 +6,7 @@ import { CardLoadingSkeleton } from "../general/Loading";
 import { formatDateRange } from "@/lib/utils";
 
 export default function ConsumptionCard({
-  selectedRange, // Pass the range object here
+  selectedRange,
   totalUsage,
   isLoading,
   projectedBill,

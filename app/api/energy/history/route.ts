@@ -1,45 +1,71 @@
 import { NextResponse } from "next/server";
-import { adminRtdb, adminDb } from "@/lib/firebase-admin";
+import { adminRtdb, adminDb, adminAuth } from "@/lib/firebase-admin";
+
+// Helper function to verify the token and get the UID
+async function verifyAuth(request: Request) {
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return {
+      uid: null,
+      error: "Missing or invalid authorization header",
+      status: 401,
+    };
+  }
+
+  const idToken = authHeader.split("Bearer ")[1];
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    return { uid: decodedToken.uid, error: null, status: 200 };
+  } catch (error) {
+    return { uid: null, error: "Invalid or expired token", status: 401 };
+  }
+}
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const uid = searchParams.get("uid");
+  // 1. Authenticate the request securely
+  const { uid, error, status } = await verifyAuth(request);
+  if (error || !uid) {
+    return NextResponse.json({ error }, { status });
+  }
 
+  const { searchParams } = new URL(request.url);
+
+  // We no longer extract 'uid' from searchParams!
   const startTs = searchParams.get("startDate");
   const endTs = searchParams.get("endDate");
   let requestedOutletId = searchParams.get("outletId");
 
-  if (!uid)
-    return NextResponse.json({ error: "UID required" }, { status: 400 });
-
   try {
-    // 1. Authenticate & Secure the User Role
+    // 2. Fetch User Profile using the SECURE token UID
     const userDoc = await adminDb.collection("users").doc(uid).get();
-    if (!userDoc.exists)
+    if (!userDoc.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
     const userData = userDoc.data()!;
     const smartDbId = userData.smartDbId;
     const role = userData.role;
 
-    if (!smartDbId)
+    if (!smartDbId) {
       return NextResponse.json({ error: "No device linked" }, { status: 404 });
+    }
 
-    // SECURITY OVERRIDE: Prevent Tenant Data Leaks
+    // 3. SECURITY OVERRIDE: Prevent Tenant Data Leaks
+    // If a tenant tries to pass ?outletId=total or someone else's ID, we force it to their assigned ID.
     if (role === "tenant") {
       requestedOutletId = userData.outletId;
     }
 
-    // 2. Define Time Range
+    // 4. Define Time Range
     const now = Math.floor(Date.now() / 1000);
     const start = startTs ? parseInt(startTs) : now - 86400;
     const end = endTs ? parseInt(endTs) : now;
 
-    // 3. Determine Aggregation Bucket Size
+    // 5. Determine Aggregation Bucket Size
     // If the selected range is greater than 24 hours, group by Day. Otherwise, by Hour.
     const isDailyAggregation = end - start > 86400;
 
-    // 4. Query Realtime Database
+    // 6. Query Realtime Database
     const historyRef = adminRtdb.ref(`Devices/ESP_${smartDbId}/History`);
     const snapshot = await historyRef
       .orderByChild("timestamp")
@@ -47,15 +73,16 @@ export async function GET(request: Request) {
       .endAt(end)
       .get();
 
-    if (!snapshot.exists())
+    if (!snapshot.exists()) {
       return NextResponse.json({ data: [], totalConsumption: 0 });
+    }
 
     const rawData = snapshot.val();
     const dataPoints = Object.values(rawData).sort(
       (a: any, b: any) => a.timestamp - b.timestamp,
     ) as any[];
 
-    // 5. Aggregation Dictionaries
+    // 7. Aggregation Dictionaries
     let totalPeriodUsage = 0;
     let previousEMap: Record<string, number> = {};
     const chartAggregatedMap: Record<string, any> = {};
@@ -135,7 +162,7 @@ export async function GET(request: Request) {
       chartAggregatedMap[timeBucketStr].count += 1;
     });
 
-    // 6. Format Final Chart Output (Sum Energy, Average Live Metrics)
+    // 8. Format Final Chart Output (Sum Energy, Average Live Metrics)
     const finalChartData = Object.values(chartAggregatedMap)
       .map((bucket: any) => ({
         date: bucket.date,

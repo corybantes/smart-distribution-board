@@ -1,10 +1,35 @@
 import { NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 
+// Helper function to verify the token and get the UID
+async function verifyAuth(request: Request) {
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return {
+      uid: null,
+      error: "Missing or invalid authorization header",
+      status: 401,
+    };
+  }
+
+  const idToken = authHeader.split("Bearer ")[1];
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    return { uid: decodedToken.uid, error: null, status: 200 };
+  } catch (error) {
+    return { uid: null, error: "Invalid or expired token", status: 401 };
+  }
+}
+
 export async function GET(request: Request) {
+  // 1. Authenticate the request securely
+  const { uid, error, status } = await verifyAuth(request);
+  if (error || !uid) {
+    return NextResponse.json({ error }, { status });
+  }
+
   const { searchParams } = new URL(request.url);
-  const uid = searchParams.get("uid");
 
   // Date Filters & Pagination
   const startDate = searchParams.get("startDate");
@@ -13,10 +38,8 @@ export async function GET(request: Request) {
   const limit = parseInt(searchParams.get("limit") || "5");
   const offset = (page - 1) * limit;
 
-  if (!uid)
-    return NextResponse.json({ error: "UID required" }, { status: 400 });
-
   try {
+    // 2. Use the secure UID from the token
     const userDoc = await adminDb.collection("users").doc(uid).get();
     const userData = userDoc.data();
 
@@ -37,9 +60,11 @@ export async function GET(request: Request) {
         });
       }
 
+      // Note: Firestore 'in' queries max out at 30 items.
+      // If you anticipate more than 30 tenants per admin, you will need to chunk this array.
       query = adminDb
         .collection("billing")
-        .where("userId", "in", tenantUids)
+        .where("userId", "in", tenantUids.slice(0, 30))
         .orderBy("createdAt", "desc");
     } else {
       // TENANT OR SINGLE-USER MODE
@@ -64,34 +89,43 @@ export async function GET(request: Request) {
       );
     }
 
+    // Run the count and fetch the paginated documents
     const countSnapshot = await query.count().get();
     const totalRecords = countSnapshot.data().count;
     const totalPages = Math.ceil(totalRecords / limit);
 
     const snapshot = await query.limit(limit).offset(offset).get();
 
-    // 5. Map Data AND Fetch User Details (Outlet ID & Name)
+    // 3. Performance Optimization: Cache user docs to prevent duplicate DB calls
+    const userCache = new Map();
+
+    // 4. Map Data AND Fetch User Details (Outlet ID & Name)
     const historyPromises = snapshot.docs.map(async (doc) => {
       const data = doc.data();
       let dateStr = "Pending";
 
       if (data.createdAt) {
         if (typeof data.createdAt.toDate === "function") {
-          dateStr = data.createdAt.toDate().toISOString(); // Better for your frontend formatter
+          dateStr = data.createdAt.toDate().toISOString();
         } else {
           dateStr = new Date(data.createdAt).toISOString();
         }
       }
 
-      // FIX: Fetch the specific user to get their Outlet ID
       let outletId = null;
       let userName = "User";
 
+      // Use the cache to look up the user details
       try {
-        const uDoc = await adminDb.collection("users").doc(data.userId).get();
-        if (uDoc.exists) {
-          outletId = uDoc.data()?.outletId || null;
-          userName = uDoc.data()?.firstName || "User";
+        if (!userCache.has(data.userId)) {
+          const uDoc = await adminDb.collection("users").doc(data.userId).get();
+          userCache.set(data.userId, uDoc.exists ? uDoc.data() : null);
+        }
+
+        const cachedUser = userCache.get(data.userId);
+        if (cachedUser) {
+          outletId = cachedUser.outletId || null;
+          userName = cachedUser.firstName || "User";
         }
       } catch (err) {
         console.error("Failed to fetch user for billing row", err);
@@ -101,8 +135,8 @@ export async function GET(request: Request) {
         id: doc.id,
         ...data,
         date: dateStr,
-        outletId: outletId, // Attach the outlet ID
-        userName: userName, // Attach the user's name (helpful for admins!)
+        outletId: outletId,
+        userName: userName,
       };
     });
 

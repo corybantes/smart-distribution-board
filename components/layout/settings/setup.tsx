@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
-import { useAuthState } from "react-firebase-hooks/auth"; // Assuming you use this, or standard onAuthStateChanged
+import useSWR from "swr";
+import { auth } from "@/lib/firebase";
+import { fetcher } from "@/lib/utils";
 import {
   Card,
   CardHeader,
@@ -21,10 +21,8 @@ import { Loader2, Home, Users } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SystemConfiguration() {
-  const [user, loading] = useAuthState(auth);
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
-  const [adminData, setAdminData] = useState<any>(null);
 
   const [mode, setMode] = useState<"single" | "multi">("single");
   const [outlets, setOutlets] = useState([
@@ -34,22 +32,19 @@ export default function SystemConfiguration() {
     { id: 4, email: "", label: "Room 4" },
   ]);
 
-  // Fetch existing config if they are editing from settings later
+  // 1. Securely fetch the admin data using our API
+  const { data: adminData, isLoading } = useSWR(
+    auth.currentUser ? `/api/user` : null,
+    fetcher,
+  );
+
+  // Sync state when data loads
   useEffect(() => {
-    if (user) {
-      const fetchAdminData = async () => {
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setAdminData(data);
-          if (data.systemMode) setMode(data.systemMode);
-          if (data.outletsConfig) setOutlets(data.outletsConfig);
-        }
-      };
-      fetchAdminData();
+    if (adminData) {
+      if (adminData.systemMode) setMode(adminData.systemMode);
+      if (adminData.outletsConfig) setOutlets(adminData.outletsConfig);
     }
-  }, [user]);
+  }, [adminData]);
 
   const handleOutletChange = (id: number, field: string, value: string) => {
     setOutlets((prev) =>
@@ -58,42 +53,30 @@ export default function SystemConfiguration() {
   };
 
   const handleSaveConfiguration = async () => {
-    if (!user || !adminData) return;
+    if (!auth.currentUser || !adminData) return;
     setIsSaving(true);
 
     try {
-      // 1. Update the Admin's Document with the chosen mode and config
-      const adminRef = doc(db, "users", user.uid);
-      await updateDoc(adminRef, {
-        systemMode: mode,
-        outletsConfig: mode === "multi" ? outlets : [], // Only save emails if multi
-        isConfigured: true,
+      // 2. Grab the secure token!
+      const token = await auth.currentUser.getIdToken();
+
+      // 3. Send the configuration to our secure backend route
+      const res = await fetch("/api/admin/setup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          mode,
+          outlets: mode === "multi" ? outlets : [],
+          smartDbId: adminData.smartDbId, // Pass the board ID so backend can link tenants
+        }),
       });
 
-      // 2. If Multi-User, generate the Tenant Invites
-      if (mode === "multi") {
-        for (const outlet of outlets) {
-          if (outlet.email.trim() !== "") {
-            const inviteRef = doc(
-              db,
-              "users",
-              outlet.email.trim().toLowerCase(),
-            );
-            // Create the temporary invite document we built the SignupPage for
-            await setDoc(
-              inviteRef,
-              {
-                adminId: user.uid,
-                smartDbId: adminData.smartDbId, // Pass the board ID to the tenant
-                outletId: outlet.id.toString(), // Assign them to O1, O2, etc.
-                assignedLabel: outlet.label, // e.g., "Room 1"
-                role: "tenant",
-                inviteStatus: "pending",
-              },
-              { merge: true },
-            ); // Merge ensures we don't overwrite an existing active tenant by mistake
-          }
-        }
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Configuration failed to save");
       }
 
       toast.success("Configuration saved successfully!");
@@ -106,10 +89,15 @@ export default function SystemConfiguration() {
     }
   };
 
-  if (loading) return <div className="p-8 text-center">Loading...</div>;
+  if (isLoading)
+    return (
+      <div className="p-8 flex justify-center">
+        <Loader2 className="animate-spin" />
+      </div>
+    );
 
   return (
-    <div className="max-w-2xl mx-auto mt-10 p-4">
+    <div className="max-w-2xl mx-auto mt-10 p-4 pb-20">
       <Card>
         <CardHeader>
           <CardTitle>System Configuration</CardTitle>
@@ -123,7 +111,7 @@ export default function SystemConfiguration() {
           <div className="space-y-4">
             <Label className="text-base">Operating Mode</Label>
             <RadioGroup
-              defaultValue={mode}
+              value={mode}
               onValueChange={(val) => setMode(val as "single" | "multi")}
               className="grid grid-cols-2 gap-4"
             >
@@ -186,7 +174,7 @@ export default function SystemConfiguration() {
                   {outlets.map((outlet) => (
                     <div
                       key={outlet.id}
-                      className="flex gap-4 items-center bg-gray-50 p-3 rounded-lg border"
+                      className="flex gap-4 items-center bg-gray-50 dark:bg-slate-900 p-3 rounded-lg border"
                     >
                       <div className="w-12 text-center font-bold text-gray-500">
                         O{outlet.id}
@@ -205,7 +193,7 @@ export default function SystemConfiguration() {
                           }
                         />
                       </div>
-                      <div className="flex-2 space-y-1">
+                      <div className="flex-1 space-y-1">
                         <Label className="text-xs">Tenant Email</Label>
                         <Input
                           type="email"

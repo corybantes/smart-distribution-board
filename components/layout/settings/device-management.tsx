@@ -16,13 +16,14 @@ import { toast } from "sonner";
 import { mutate } from "swr";
 import { useState } from "react";
 import { Outlet, SystemConfig } from "@/lib/utils";
-import { Skeleton } from "../../ui/skeleton"; // <-- Imported Skeleton
+import { Skeleton } from "../../ui/skeleton";
+import { auth } from "@/lib/firebase"; // <-- 1. Import Auth
 
 export default function DeviceManagement({
   outlets,
   config,
   user,
-  isLoading = false, // <-- Added loading prop
+  isLoading = false,
 }: {
   outlets: Outlet[] | undefined;
   config: SystemConfig | undefined;
@@ -39,9 +40,15 @@ export default function DeviceManagement({
     setIsAdding(true);
 
     try {
+      // 2. Grab the secure token
+      const token = await auth.currentUser?.getIdToken();
+
       await fetch("/api/admin/outlets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // <-- 3. Attach it here
+        },
         body: JSON.stringify({
           id: newDevice.mac,
           name: newDevice.name,
@@ -64,12 +71,19 @@ export default function DeviceManagement({
     const updatedList = outlets?.map((o) =>
       o.id === id ? { ...o, ...updates } : o,
     );
+    // Optimistic update
     mutate(`/api/admin/outlets?uid=${user?.uid}`, updatedList, false);
 
     try {
+      // 4. Grab the token for the PUT request too
+      const token = await auth.currentUser?.getIdToken();
+
       await fetch("/api/admin/outlets", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // <-- 5. Attach it here
+        },
         body: JSON.stringify({ id, ...updates }),
       });
     } catch (e) {
@@ -158,7 +172,7 @@ export default function DeviceManagement({
             <div className="md:col-span-2">
               <Button
                 onClick={handleAddOutlet}
-                disabled={isLoading || isAdding} // <-- Disable while page is initially loading
+                disabled={isLoading || isAdding}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {isAdding ? (

@@ -5,11 +5,12 @@ import { useAuth } from "@/context/AuthContext";
 import { UserAvatar } from "@/components/layout/general/user-avatar";
 import { EditableField } from "@/components/layout/general/editable-field";
 import { AddressManager } from "@/components/layout/general/address-manager";
+import { auth } from "@/lib/firebase";
+import { fetcher } from "@/lib/utils";
+import { toast } from "sonner";
 
-// Icons
 import { Mail, User as UserIcon, ShieldCheck, MapPin } from "lucide-react";
 
-// Shadcn Components
 import {
   Card,
   CardContent,
@@ -21,37 +22,64 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
-// Fetcher
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
 export default function ProfilePage() {
   const { user } = useAuth();
   const API_URL = user ? `/api/user?uid=${user.uid}` : null;
 
+  // 1. Fetching securely using the global fetcher
   const { data: profile, isLoading } = useSWR(API_URL, fetcher);
 
-  // 1. Handle Single Field Updates (Personal Details)
+  // 2. Handle Single Field Updates (Personal Details)
   const handleFieldUpdate = async (key: string, newValue: string) => {
     if (!user) return;
-    const res = await fetch("/api/user", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uid: user.uid, [key]: newValue }),
-    });
-    if (!res.ok) throw new Error("Failed");
-    mutate(API_URL);
+    try {
+      // Grab the fresh token
+      const token = await auth.currentUser?.getIdToken();
+
+      const res = await fetch("/api/user", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // <-- Attach secure token
+        },
+        // We don't need to pass the UID in the body anymore, backend extracts it!
+        body: JSON.stringify({ [key]: newValue }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update profile");
+
+      toast.success("Profile updated successfully");
+      mutate(API_URL);
+    } catch (error) {
+      toast.error("Failed to update profile");
+      console.error(error);
+    }
   };
 
-  // 2. Handle Bulk Address Update
+  // 3. Handle Bulk Address Update
   const handleAddressUpdate = async (addressData: any) => {
     if (!user) return;
-    const res = await fetch("/api/user", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uid: user.uid, ...addressData }),
-    });
-    if (!res.ok) throw new Error("Failed");
-    mutate(API_URL);
+    try {
+      // Grab the fresh token
+      const token = await auth.currentUser?.getIdToken();
+
+      const res = await fetch("/api/user", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // <-- Attach secure token
+        },
+        body: JSON.stringify(addressData),
+      });
+
+      if (!res.ok) throw new Error("Failed to update address");
+
+      toast.success("Address updated successfully");
+      mutate(API_URL);
+    } catch (error) {
+      toast.error("Failed to update address");
+      console.error(error);
+    }
   };
 
   if (isLoading) return <ProfileSkeleton />;
@@ -63,8 +91,6 @@ export default function ProfilePage() {
         {/* Avatar: Larger size, clean presentation */}
         <div className="relative">
           <div className="h-24 w-24 md:h-32 md:w-32 rounded-full ring-4 ring-background bg-muted flex items-center justify-center overflow-hidden relative z-10">
-            {/* We need to wrap UserAvatar to override its default size styling if necessary, 
-                     or ensure UserAvatar fills this container. Assuming UserAvatar is flexible: */}
             <div className="scale-[2.5] md:scale-[3.5]">
               <UserAvatar />
             </div>
@@ -103,7 +129,7 @@ export default function ProfilePage() {
 
       {/* --- MAIN GRID CONTENT --- */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-        {/* LEFT SIDEBAR (Read-Only / System Info) - Takes 4 columns */}
+        {/* LEFT SIDEBAR (Read-Only / System Info) */}
         <div className="md:col-span-4 space-y-6">
           <Card className="bg-muted/30 border-none shadow-none">
             <CardHeader>
@@ -142,7 +168,7 @@ export default function ProfilePage() {
           </Card>
         </div>
 
-        {/* RIGHT MAIN CONTENT (Editable Forms) - Takes 8 columns */}
+        {/* RIGHT MAIN CONTENT (Editable Forms) */}
         <div className="md:col-span-8 space-y-8 px-2 md:px-0">
           {/* Section 1: Personal Information */}
           <section className="space-y-4">
@@ -214,7 +240,7 @@ function ProfileSkeleton() {
     <div className="container max-w-5xl mx-auto py-10 px-4 md:px-6 space-y-8 animate-pulse">
       {/* Header Skeleton */}
       <div className="flex items-center gap-6 border-b pb-8">
-        <Skeleton className="h-32 w-32 rounded-full" />
+        <Skeleton className="h-32 w-32 rounded-full shrink-0" />
         <div className="space-y-3 flex-1">
           <Skeleton className="h-10 w-1/2" />
           <Skeleton className="h-4 w-1/3" />

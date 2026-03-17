@@ -1,4 +1,3 @@
-// lib/notify.ts
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -20,10 +19,13 @@ export async function triggerAlert(
       createdAt: FieldValue.serverTimestamp(),
     });
 
-    // 2. Send the Email
+    // 2. Send the Email securely
     await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/notify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.SMART_DB_API_SECRET}`,
+      },
       body: JSON.stringify({ email, type: title, message }),
     });
   } catch (error) {

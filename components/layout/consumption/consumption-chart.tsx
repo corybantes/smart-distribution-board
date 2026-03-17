@@ -98,7 +98,6 @@ export default function ConsumptionChart({
   // Check if we have data to display
   const hasData = historyData && historyData.length > 0;
 
-  // Reusable Empty State UI
   const EmptyChartState = () => (
     <div className="h-75 w-full flex flex-col items-center justify-center text-muted-foreground rounded-lg border-2 border-dashed border-muted bg-muted/10">
       <Activity className="h-10 w-10 mb-3 opacity-20" />

@@ -35,7 +35,6 @@ export default function WeatherCard({
   }, [profile]);
 
   return (
-    // FIX: Changed text-primary to text-white for proper contrast on the gradient
     <Card className="bg-linear-to-br from-indigo-600 to-purple-700 text-white border-none flex flex-col justify-between p-6 shadow-md h-full min-h-35">
       {weather ? (
         <>

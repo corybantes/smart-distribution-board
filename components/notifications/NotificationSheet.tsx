@@ -16,20 +16,16 @@ import {
   XCircle,
   Trash2,
 } from "lucide-react";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase"; // <-- Imported auth for the token
 import {
   collection,
   query,
   where,
   orderBy,
   onSnapshot,
-  deleteDoc,
-  doc,
-  updateDoc,
 } from "firebase/firestore";
 import { useAuth } from "@/context/AuthContext";
 import { formatDistanceToNow } from "date-fns";
-import { ScrollArea } from "@/components/ui/scroll-area"; // You might need: npx shadcn-ui@latest add scroll-area
 
 // Define types
 interface Notification {
@@ -49,11 +45,11 @@ export function NotificationSheet() {
   useEffect(() => {
     if (!user) return;
 
-    // Real-time listener for notifications
+    // Real-time listener for notifications is PERFECT here.
     const q = query(
       collection(db, "notifications"),
       where("userId", "==", user.uid),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -70,15 +66,48 @@ export function NotificationSheet() {
   }, [user]);
 
   const markAsRead = async (id: string) => {
-    await updateDoc(doc(db, "notifications", id), { read: true });
+    // 1. Optimistic UI Update: Make it feel instant
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+
+    try {
+      // 2. Secure Backend Mutation
+      const token = await auth.currentUser?.getIdToken();
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id }),
+      });
+    } catch (error) {
+      console.error("Failed to mark as read:", error);
+    }
   };
 
   const clearNotification = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering other clicks
-    await deleteDoc(doc(db, "notifications", id));
+    e.stopPropagation();
+
+    // 1. Optimistic UI Update: Remove it instantly
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+
+    try {
+      // 2. Secure Backend Mutation
+      const token = await auth.currentUser?.getIdToken();
+      await fetch(`/api/notifications?id=${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to delete notification:", error);
+    }
   };
 
-  // Helper to get icon based on type
   const getIcon = (type: string) => {
     switch (type) {
       case "warning":
@@ -115,7 +144,6 @@ export function NotificationSheet() {
           </SheetTitle>
         </SheetHeader>
 
-        {/* Notification List */}
         <div className="h-[calc(100vh-100px)] overflow-y-auto pr-4 space-y-4">
           {notifications.length === 0 ? (
             <div className="text-center text-gray-500 mt-10">
