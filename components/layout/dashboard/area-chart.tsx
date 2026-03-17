@@ -113,7 +113,6 @@ export function ChartAreaDefault({
                   content={<ChartTooltipContent indicator="dot" />}
                 />
 
-                {/* Clean, standard blue matching the Consumption page */}
                 <Area
                   name="Energy"
                   dataKey={dataKey}

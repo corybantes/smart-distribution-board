@@ -65,8 +65,6 @@ export default function Billing() {
     });
   }
 
-  // WE REMOVED THE FULL PAGE LOADER! 🚀
-
   return (
     <div className="flex flex-col flex-1 w-full gap-6 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-20">
       {/* TOP ROW: GRID LAYOUT */}
@@ -81,27 +79,23 @@ export default function Billing() {
             }}
             user={profile}
             pricePerKwh={price}
-            isLoading={isLoadingProfile} // <-- Added loading prop
+            isLoading={isLoadingProfile}
           />
         </div>
 
         {/* 2. DYNAMIC RIGHT CARD */}
         <div className="flex w-full h-full">
-          {/* Clever trick: If profile is loading, isAdmin is false, 
-            so the BillingChart skeleton shows by default. Once loaded, 
-            it swaps to the AdminChart if the user is an admin! 
-          */}
           {!isAdmin ? (
             <BillingChart
               historyAmounts={historicalData}
               graphData={graphData}
               predictedAmount={predictedAmount}
-              isLoading={isLoadingProfile || isLoadingConfig} // <-- Added loading prop
+              isLoading={isLoadingProfile || isLoadingConfig}
             />
           ) : (
             <BillingAdminChart
               outlets={outlets?.data || outlets || []}
-              isLoading={isLoadingOutlets} // <-- Added loading prop
+              isLoading={isLoadingOutlets}
             />
           )}
         </div>
@@ -114,7 +108,7 @@ export default function Billing() {
         currentPage={page}
         totalPages={billingTableData?.meta?.totalPages || 1}
         onPageChange={(newPage: number) => setPage(newPage)}
-        loading={isTableLoading || isLoadingProfile} // <-- Added loading prop
+        loading={isTableLoading || isLoadingProfile}
       />
 
       {/* TOP-UP MODAL (Dialog) */}

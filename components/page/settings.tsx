@@ -8,6 +8,7 @@ import GlobalConfiguration from "../layout/settings/globalConfiguration";
 import ModeSelection from "../layout/settings/mode-selection";
 import Loading from "../layout/general/Loading";
 import { fetcher, Outlet, SystemConfig } from "@/lib/utils";
+import { auth } from "@/lib/firebase";
 
 export default function Settings() {
   const { user } = useAuth();
