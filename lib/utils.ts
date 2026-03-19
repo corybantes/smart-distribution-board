@@ -63,8 +63,9 @@ export interface Outlet {
   billingEnabled: boolean;
   unitLimit: number;
   currentUsage: number;
-  status: "active" | "cutoff";
+  status: "active" | "inactive";
   priority: number;
+  tenantName: string;
 }
 
 export interface SystemConfig {

@@ -69,7 +69,7 @@ export default function Dashboard() {
     fetcher,
   );
 
-  // 4. Fetch History Data (Using Unix Timestamps)
+  // 4. Fetch History Data
   const historyUrl = user
     ? `/api/energy/history?uid=${user.uid}&startDate=${
         selectedRange.startTs
@@ -134,24 +134,24 @@ export default function Dashboard() {
           totalUsage={totalUsage}
           totalCost={projectedBill}
           predictedCost={predictedAmount}
-          isLoading={isMetricsLoading} // <-- Passes combined loading state
+          isLoading={isMetricsLoading}
           selectedRange={selectedRange}
         />
 
         {/* 2. SYSTEM HEALTH CARDS */}
-        {/* The ternary operator neatly splits logic while sharing the loading state */}
         {isAdmin ? (
           <HardwareAdminList
             energyData={energyData}
             outlets={visibleOutlets}
             user={user}
-            isLoading={isHardwareLoading} // <-- Passes combined loading state
+            isLoading={isHardwareLoading}
             profile={profile}
           />
         ) : (
           <HardwareTenantWidget
             outlet={visibleOutlets[0]}
-            isLoading={isHardwareLoading} // <-- Passes combined loading state
+            userProfile={profile}
+            isLoading={isHardwareLoading}
           />
         )}
 
@@ -164,7 +164,7 @@ export default function Dashboard() {
             chartTitle={chartTitle}
             dataKey={"usage"}
             selectedRange={selectedRange}
-            isLoading={isChartLoading} // <-- Passes combined loading state
+            isLoading={isChartLoading}
           />
         </div>
       </div>

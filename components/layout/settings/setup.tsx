@@ -42,7 +42,16 @@ export default function SystemConfiguration() {
   useEffect(() => {
     if (adminData) {
       if (adminData.systemMode) setMode(adminData.systemMode);
-      if (adminData.outletsConfig) setOutlets(adminData.outletsConfig);
+      if (adminData.outletsConfig) {
+        // Map backend schema back to this component's local state schema
+        setOutlets(
+          adminData.outletsConfig.map((o: any) => ({
+            id: o.id,
+            email: o.assignedEmail || o.email || "",
+            label: o.name || o.label || `Room ${o.id}`,
+          })),
+        );
+      }
     }
   }, [adminData]);
 
@@ -57,10 +66,20 @@ export default function SystemConfiguration() {
     setIsSaving(true);
 
     try {
-      // 2. Grab the secure token!
       const token = await auth.currentUser.getIdToken();
 
-      // 3. Send the configuration to our secure backend route
+      // FIX: Format the array to match the strict schema used in DeviceManagement
+      // This injects the proper default 'inactive' status for tenants!
+      const formattedOutlets = outlets.map((o, index) => ({
+        id: o.id.toString(),
+        name: o.label, // Maps to DeviceManagement schema
+        label: o.label, // Kept for backward compatibility with backend
+        assignedEmail: o.email, // Maps to DeviceManagement schema
+        email: o.email, // Kept for backward compatibility with backend
+        priority: index + 1,
+        status: mode === "single" ? "active" : "inactive", // Security Lock Default!
+      }));
+
       const res = await fetch("/api/admin/setup", {
         method: "POST",
         headers: {
@@ -69,8 +88,8 @@ export default function SystemConfiguration() {
         },
         body: JSON.stringify({
           mode,
-          outlets: mode === "multi" ? outlets : [],
-          smartDbId: adminData.smartDbId, // Pass the board ID so backend can link tenants
+          outlets: mode === "multi" ? formattedOutlets : [],
+          smartDbId: adminData.smartDbId,
         }),
       });
 

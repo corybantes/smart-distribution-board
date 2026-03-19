@@ -103,10 +103,10 @@ export default function BillingTopup({
         <DialogHeader className="px-6 pt-8">
           <DialogTitle className="text-2xl flex items-center gap-2">
             <Wallet className="text-blue-500" />
-            Allocate Credits
+            Credit Topup
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            Transfer funds to a specific hardware endpoint.
+            Allocate credit to a specific outlet.
           </DialogDescription>
         </DialogHeader>
         {/* </div> */}
@@ -116,7 +116,7 @@ export default function BillingTopup({
           {/* Target Selection */}
           <div className="space-y-3">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Select Target Endpoint
+              Select Outlet
             </Label>
             <Select value={selectedOutlet} onValueChange={setSelectedOutlet}>
               <SelectTrigger className="w-full h-12 bg-muted/50 border-muted-foreground/20">

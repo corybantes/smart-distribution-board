@@ -10,16 +10,33 @@ export default function BillingCard({
   setIsTopUpOpen,
   user,
   pricePerKwh,
+  outlets = [], // <-- NEW: Added outlets array
   isLoading = false,
 }: {
   billingData: any;
   setIsTopUpOpen: (open: boolean) => void;
   user: any;
   pricePerKwh: number;
+  outlets?: any[]; // <-- NEW: Added as optional prop
   isLoading?: boolean;
 }) {
-  const balance = billingData?.balance || 0;
   const isAdmin = user?.role === "admin";
+
+  // --- SMART BALANCE CALCULATION ---
+  // If user is Admin and has active tenants, sum up their wallets for the Master Grid
+  // Otherwise, default to their personal profile balance.
+  let balance = billingData?.balance || 0;
+
+  if (isAdmin && outlets && outlets.length > 0) {
+    const totalTenantBalance = outlets.reduce(
+      (sum, outlet) => sum + (Number(outlet.tenantBalance) || 0),
+      0,
+    );
+    // If we detected money in the sub-wallets, display the aggregated total!
+    if (totalTenantBalance > 0) {
+      balance = totalTenantBalance;
+    }
+  }
 
   // Health calculation: Tenants consider 10k full, Admins (Master Grid) consider 50k full.
   const maxThreshold = isAdmin ? 50000 : 10000;

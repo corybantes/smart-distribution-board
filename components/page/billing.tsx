@@ -78,6 +78,7 @@ export default function Billing() {
               unbilledAmount: profile?.unbilledAmount || 0,
             }}
             user={profile}
+            outlets={outlets}
             pricePerKwh={price}
             isLoading={isLoadingProfile}
           />

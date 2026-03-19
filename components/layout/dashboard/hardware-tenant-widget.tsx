@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -5,12 +8,53 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Activity, Loader2 } from "lucide-react";
+import { Activity, Loader2, Power } from "lucide-react";
+import { toast } from "sonner";
+import { auth } from "@/lib/firebase";
 
-export default function HardwareTenantWidget({ outlet, isLoading }: any) {
+export default function HardwareTenantWidget({
+  outlet,
+  userProfile,
+  isLoading,
+}: any) {
+  const [isToggling, setIsToggling] = useState(false);
+
   if (!outlet) return null;
   const isOn = outlet.status === 1;
+
+  const handleTogglePower = async (newCheckedState: boolean) => {
+    setIsToggling(true);
+    const action = newCheckedState ? "ON" : "OFF";
+
+    try {
+      const token = await auth.currentUser?.getIdToken();
+
+      const res = await fetch("/api/control", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          smartDbId: userProfile?.smartDbId,
+          outletId: outlet.id,
+          action: action,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to toggle power");
+      }
+
+      toast.success(data.message);
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setIsToggling(false);
+    }
+  };
 
   return (
     <div className="px-4 lg:px-6 mt-6">
@@ -26,12 +70,55 @@ export default function HardwareTenantWidget({ outlet, isLoading }: any) {
               <span className="font-medium text-foreground">{outlet.name}</span>
             </CardDescription>
           </div>
-          <Badge
-            variant="outline"
-            className={`px-3 py-1 font-bold text-[10px] ${isOn ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}
-          >
-            {isOn ? "Active Online" : "Power Offline"}
-          </Badge>
+
+          {/* Custom Embedded Text Switch */}
+          <div className="flex items-center">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isOn}
+              disabled={isLoading || isToggling}
+              onClick={() => handleTogglePower(!isOn)}
+              className={`
+                relative inline-flex h-9 w-24 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent 
+                transition-colors duration-300 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                ${isOn ? "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-slate-300 dark:bg-slate-700"}
+                ${isLoading || isToggling ? "opacity-60 cursor-not-allowed" : ""}
+              `}
+            >
+              <span className="sr-only">Toggle power</span>
+
+              {/* ON Text */}
+              <span
+                className={`absolute left-2.5 text-[10px] font-bold tracking-wider text-white transition-opacity duration-300 ${isOn ? "opacity-100" : "opacity-0"}`}
+              >
+                ACTIVE
+              </span>
+
+              {/* OFF Text */}
+              <span
+                className={`absolute right-1.5 text-[10px] font-bold tracking-wider text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${!isOn ? "opacity-100" : "opacity-0"}`}
+              >
+                INACTIVE
+              </span>
+
+              {/* Sliding Thumb */}
+              <span
+                className={`
+                  pointer-events-none flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-lg ring-0 transition-transform duration-300 ease-in-out
+                  ${isOn ? "translate-x-16" : "translate-x-0"}
+                `}
+              >
+                {isToggling ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
+                ) : (
+                  <Power
+                    className={`h-3.5 w-3.5 ${isOn ? "text-green-500" : "text-slate-400"}`}
+                  />
+                )}
+              </span>
+            </button>
+          </div>
         </CardHeader>
 
         <CardContent className="p-6 md:p-8">
