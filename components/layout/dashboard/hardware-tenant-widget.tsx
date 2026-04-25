@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/card";
 import { Activity, Loader2, Power } from "lucide-react";
 import { toast } from "sonner";
-import { auth } from "@/lib/firebase";
+import { auth, rtdb } from "@/lib/firebase"; // <-- Make sure rtdb is exported from here!
+import { ref, onValue } from "firebase/database"; // <-- Import RTDB functions
 
 export default function HardwareTenantWidget({
   outlet,
@@ -19,12 +20,37 @@ export default function HardwareTenantWidget({
 }: any) {
   const [isToggling, setIsToggling] = useState(false);
 
+  // Create a local state for the live power status
+  const [isLiveOn, setIsLiveOn] = useState(outlet?.status === 1);
+
+  // --- NEW: DIRECT RTDB LISTENER ---
+  useEffect(() => {
+    if (!userProfile?.smartDbId || !outlet?.id) return;
+
+    // Point directly to this exact outlet's control path
+    const controlRef = ref(
+      rtdb,
+      `Devices/ESP_${userProfile.smartDbId}/Control/O${outlet.id}`,
+    );
+
+    // Listen for live changes. This fires instantly if the web app OR the ESP32 changes it!
+    const unsubscribe = onValue(controlRef, (snapshot) => {
+      const val = snapshot.val();
+      setIsLiveOn(val === 1);
+    });
+
+    // Cleanup listener on unmount
+    return () => unsubscribe();
+  }, [userProfile?.smartDbId, outlet?.id]);
+
   if (!outlet) return null;
-  const isOn = outlet.status === 1;
 
   const handleTogglePower = async (newCheckedState: boolean) => {
     setIsToggling(true);
     const action = newCheckedState ? "ON" : "OFF";
+
+    // Optimistically update UI so it feels instant
+    setIsLiveOn(newCheckedState);
 
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -45,6 +71,8 @@ export default function HardwareTenantWidget({
       const data = await res.json();
 
       if (!res.ok) {
+        // If the admin locked it, revert the optimistic update
+        setIsLiveOn(!newCheckedState);
         throw new Error(data.error || "Failed to toggle power");
       }
 
@@ -76,13 +104,13 @@ export default function HardwareTenantWidget({
             <button
               type="button"
               role="switch"
-              aria-checked={isOn}
+              aria-checked={isLiveOn}
               disabled={isLoading || isToggling}
-              onClick={() => handleTogglePower(!isOn)}
+              onClick={() => handleTogglePower(!isLiveOn)}
               className={`
                 relative inline-flex h-9 w-24 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent 
                 transition-colors duration-300 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                ${isOn ? "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-slate-300 dark:bg-slate-700"}
+                ${isLiveOn ? "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-slate-300 dark:bg-slate-700"}
                 ${isLoading || isToggling ? "opacity-60 cursor-not-allowed" : ""}
               `}
             >
@@ -90,14 +118,14 @@ export default function HardwareTenantWidget({
 
               {/* ON Text */}
               <span
-                className={`absolute left-2.5 text-[10px] font-bold tracking-wider text-white transition-opacity duration-300 ${isOn ? "opacity-100" : "opacity-0"}`}
+                className={`absolute left-2.5 text-[10px] font-bold tracking-wider text-white transition-opacity duration-300 ${isLiveOn ? "opacity-100" : "opacity-0"}`}
               >
                 ACTIVE
               </span>
 
               {/* OFF Text */}
               <span
-                className={`absolute right-1.5 text-[10px] font-bold tracking-wider text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${!isOn ? "opacity-100" : "opacity-0"}`}
+                className={`absolute right-1.5 text-[10px] font-bold tracking-wider text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${!isLiveOn ? "opacity-100" : "opacity-0"}`}
               >
                 INACTIVE
               </span>
@@ -106,14 +134,14 @@ export default function HardwareTenantWidget({
               <span
                 className={`
                   pointer-events-none flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-lg ring-0 transition-transform duration-300 ease-in-out
-                  ${isOn ? "translate-x-16" : "translate-x-0"}
+                  ${isLiveOn ? "translate-x-16" : "translate-x-0"}
                 `}
               >
                 {isToggling ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
                 ) : (
                   <Power
-                    className={`h-3.5 w-3.5 ${isOn ? "text-green-500" : "text-slate-400"}`}
+                    className={`h-3.5 w-3.5 ${isLiveOn ? "text-green-500" : "text-slate-400"}`}
                   />
                 )}
               </span>

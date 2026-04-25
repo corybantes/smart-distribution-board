@@ -75,7 +75,7 @@ export default function DeviceManagement({
           assignedEmail: isSingleMode ? null : newOutlet.email,
           priority: (outlets?.length || 0) + 1,
           adminId: user?.uid,
-          // FIX: Single users default to active, Tenants default to inactive (Suspended)
+          // Single-family users default to active, Tenants default to suspended until they pay
           status: isSingleMode ? "active" : "inactive",
         }),
       });
@@ -91,6 +91,7 @@ export default function DeviceManagement({
   };
 
   const updateOutlet = async (id: string, updates: Partial<Outlet>) => {
+    // Optimistic UI update
     const updatedList = outlets?.map((o) =>
       o.id === id ? { ...o, ...updates } : o,
     );
@@ -109,7 +110,7 @@ export default function DeviceManagement({
       });
     } catch (e) {
       toast.error("Failed to update outlet");
-      mutate(`/api/admin/outlets?uid=${user?.uid}`);
+      mutate(`/api/admin/outlets?uid=${user?.uid}`); // Revert on failure
     }
   };
 
@@ -259,7 +260,7 @@ export default function DeviceManagement({
                 const priority = outlet.priority || 0;
                 const isTopPriority = isSingleMode && index === 0;
 
-                // FIX: Safely check for valid tenant name string, rejecting JavaScript's "undefined undefined"
+                // Safely check for valid tenant name string, rejecting JavaScript's "undefined undefined"
                 const hasValidName =
                   outlet.tenantName &&
                   outlet.tenantName.trim() !== "" &&
@@ -302,8 +303,7 @@ export default function DeviceManagement({
                               {isRegistered ? (
                                 <span className="flex items-center text-[10px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded font-medium">
                                   <CheckCircle2 className="w-3 h-3 mr-1" />
-                                  {outlet.tenantName}{" "}
-                                  {/* Shows their actual name! */}
+                                  {outlet.tenantName}
                                 </span>
                               ) : (
                                 <span className="flex items-center text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded font-medium">
@@ -312,7 +312,7 @@ export default function DeviceManagement({
                                 </span>
                               )}
                             </div>
-                            {/* Bonus: Show their current wallet balance if registered */}
+                            {/* Shows their current wallet balance if registered */}
                             {isRegistered && (
                               <div className="text-[10px] text-muted-foreground font-mono">
                                 Wallet: ₦

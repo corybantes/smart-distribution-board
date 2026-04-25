@@ -5,10 +5,10 @@ import { triggerAlert } from "@/lib/notify";
 
 export async function GET(request: Request) {
   // 1. Security Check (Uncomment for production before deploying to Vercel)
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // const authHeader = request.headers.get("authorization");
+  // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // }
 
   try {
     const configSnap = await adminDb.collection("config").doc("global").get();
@@ -156,7 +156,6 @@ export async function GET(request: Request) {
             needsDbUpdate = true;
           }
         } else if (boardTemp <= 45 && user.thermalNotified) {
-          // Reset when board cools down below 45°C
           updateData.thermalNotified = false;
           needsDbUpdate = true;
         }
@@ -178,7 +177,6 @@ export async function GET(request: Request) {
             needsDbUpdate = true;
           }
         } else if (currentPower <= 2000 && user.overloadNotified) {
-          // Reset when power load drops back to a safe baseline
           updateData.overloadNotified = false;
           needsDbUpdate = true;
         }
@@ -192,11 +190,11 @@ export async function GET(request: Request) {
             balance: parseFloat(balance.toFixed(2)),
           });
         } else {
-          // All 3 rules passed (Balance > 0, Temp < 50, Power <= 2500)
-          await adminRtdb.ref(controlPath).set(1);
+          // CRITICAL FIX: DO NOTHING!
+          // Respect the user's manual switch choice and the Admin Master Lock.
           results.push({
             uid,
-            status: "ACTIVE",
+            status: "HEALTHY (No action taken)",
             balance: parseFloat(balance.toFixed(2)),
           });
         }

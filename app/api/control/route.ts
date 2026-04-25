@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminRtdb, adminDb, adminAuth } from "@/lib/firebase-admin";
 
-// Helper function to verify the token
+// Helper function to verify the secure Firebase token
 async function verifyAuth(request: Request) {
   const authHeader = request.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -40,9 +40,9 @@ export async function POST(request: Request) {
     const userData = userDoc.data();
     const role = userData?.role;
 
-    // 2. Tenant Validation & Admin Override Check
+    // 2. Tenant Security Validations
     if (role === "tenant") {
-      // Security Check 1: Do they own this outlet?
+      // Security Check 1: Do they own this physical outlet?
       if (String(userData?.outletId) !== String(outletId)) {
         return NextResponse.json(
           { error: "Unauthorized access to this channel" },
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         );
       }
 
-      // Security Check 2: Has the Admin locked this outlet?
+      // Security Check 2: Has the Admin applied the Master Lock?
       if (action === "ON" && userData?.adminId) {
         const adminDoc = await adminDb
           .collection("users")
@@ -65,18 +65,29 @@ export async function POST(request: Request) {
           return NextResponse.json(
             {
               error:
-                "Access Denied: The system administrator has disabled power to this room.",
+                "Access Denied: The system administrator has suspended power to this room.",
             },
             { status: 403 },
           );
         }
       }
+
+      // Security Check 3: Does the tenant have a positive wallet balance?
+      if (action === "ON" && (userData?.balance || 0) <= 0) {
+        return NextResponse.json(
+          {
+            error:
+              "Access Denied: Your wallet balance is exhausted. Please top up to restore power.",
+          },
+          { status: 403 },
+        );
+      }
     }
 
-    // 3. Determine State Value (Assuming 1 = ON, 0 = OFF)
+    // 3. Determine State Value (1 = ON, 0 = OFF)
     const statusValue = action === "ON" ? 1 : 0;
 
-    // 4. Write to Realtime Database
+    // 4. Write Command directly to Realtime Database
     const controlPath = `Devices/ESP_${smartDbId}/Control/O${outletId}`;
     await adminRtdb.ref(controlPath).set(statusValue);
 
