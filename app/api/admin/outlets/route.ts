@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { adminDb, adminAuth } from "@/lib/firebase-admin";
+import { adminDb, adminAuth, adminRtdb } from "@/lib/firebase-admin"; // Added adminRtdb!
 
 // Helper function to verify the token and get the UID
 async function verifyAuth(request: Request) {
@@ -21,8 +21,10 @@ async function verifyAuth(request: Request) {
   }
 }
 
+// ==========================================
+// GET: Fetch all outlets for the Admin
+// ==========================================
 export async function GET(request: Request) {
-  // 1. Authenticate the request securely
   const { uid, error, status } = await verifyAuth(request);
 
   if (error || !uid) {
@@ -30,7 +32,6 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 2. Use the verified UID from the token, NEVER from the URL query params
     const userDoc = await adminDb.collection("users").doc(uid).get();
 
     if (!userDoc.exists) {
@@ -39,22 +40,20 @@ export async function GET(request: Request) {
 
     const userData = userDoc.data();
 
-    // 3. Strict Role-Based Access Control (RBAC)
+    // Strict Role-Based Access Control (RBAC)
     if (userData?.role !== "admin") {
-      // If the user is a Tenant, immediately reject. They shouldn't be fetching the master list.
       return NextResponse.json(
         { error: "Unauthorized: Admins only" },
         { status: 403 },
       );
     }
 
-    // 4. Admin is verified. Grab their configured outlets.
     const outletsConfig = userData.outletsConfig || [];
     const smartDbId = userData.smartDbId;
 
     let tenantsData: any[] = [];
 
-    // 5. Fetch the LIVE tenant documents to get their current wallet balances
+    // Fetch LIVE tenant documents to get their current wallet balances
     if (smartDbId) {
       const tenantsSnap = await adminDb
         .collection("users")
@@ -65,20 +64,20 @@ export async function GET(request: Request) {
       tenantsData = tenantsSnap.docs.map((doc) => doc.data());
     }
 
-    // 6. Merge the live tenant data with the Admin's outlet configuration
+    // Merge the live tenant data with the Admin's outlet configuration
     const formattedOutlets = outletsConfig.map((o: any) => {
-      // Find the specific tenant assigned to this outlet ID
       const activeTenant = tenantsData.find(
         (t) => String(t.outletId) === String(o.id),
       );
 
       return {
         id: o.id.toString(),
-        name: o.label || `Outlet ${o.id}`,
-        assignedEmail: o.email || null,
-        // Inject the live data for the Admin Chart!
+        name: o.label || o.name || `Outlet ${o.id}`,
+        assignedEmail: o.email || o.assignedEmail || null,
+        priority: o.priority || 0,
+        status: o.status || "active",
         tenantName: activeTenant
-          ? `${activeTenant.firstName} ${activeTenant.lastName}`.trim()
+          ? `${activeTenant.firstName || ""} ${activeTenant.lastName || ""}`.trim()
           : null,
         tenantBalance: activeTenant ? activeTenant.balance || 0 : 0,
       };
@@ -89,6 +88,105 @@ export async function GET(request: Request) {
     console.error("Outlets API Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch outlets", details: error.message },
+      { status: 500 },
+    );
+  }
+}
+
+// ==========================================
+// POST: Add a brand new outlet channel
+// ==========================================
+export async function POST(request: Request) {
+  const { uid, error, status } = await verifyAuth(request);
+  if (error || !uid) return NextResponse.json({ error }, { status });
+
+  try {
+    const body = await request.json();
+    const userRef = adminDb.collection("users").doc(uid);
+    const userDoc = await userRef.get();
+
+    if (userDoc.data()?.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const currentOutlets = userDoc.data()?.outletsConfig || [];
+
+    // Check if channel ID already exists
+    if (currentOutlets.some((o: any) => String(o.id) === String(body.id))) {
+      return NextResponse.json(
+        { error: "Channel ID already exists" },
+        { status: 400 },
+      );
+    }
+
+    const newOutlet = {
+      id: body.id,
+      name: body.name,
+      assignedEmail: body.assignedEmail,
+      priority: body.priority,
+      status: body.status,
+    };
+
+    currentOutlets.push(newOutlet);
+    await userRef.update({ outletsConfig: currentOutlets });
+
+    return NextResponse.json({ success: true, outlet: newOutlet });
+  } catch (err: any) {
+    console.error("POST Outlet Error:", err);
+    return NextResponse.json(
+      { error: "Failed to add outlet" },
+      { status: 500 },
+    );
+  }
+}
+
+// ==========================================
+// PUT: Update an existing outlet (The Fix!)
+// ==========================================
+export async function PUT(request: Request) {
+  const { uid, error, status } = await verifyAuth(request);
+  if (error || !uid) return NextResponse.json({ error }, { status });
+
+  try {
+    const body = await request.json();
+    const userRef = adminDb.collection("users").doc(uid);
+    const userDoc = await userRef.get();
+    const userData = userDoc.data();
+
+    if (userData?.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const currentOutlets = userData?.outletsConfig || [];
+    const smartDbId = userData?.smartDbId;
+
+    // Find and update the specific outlet array item
+    const updatedOutlets = currentOutlets.map((outlet: any) => {
+      if (String(outlet.id) === String(body.id)) {
+        return { ...outlet, ...body };
+      }
+      return outlet;
+    });
+
+    // 1. Save to Firestore (The Ledger)
+    await userRef.update({ outletsConfig: updatedOutlets });
+
+    // 2. CRITICAL SYNC: Update Realtime Database to fix the Split-Brain Bug
+    if (body.status !== undefined && smartDbId) {
+      const controlPath = `Devices/ESP_${smartDbId}/Control/O${body.id}`;
+
+      if (body.status === "inactive") {
+        await adminRtdb.ref(controlPath).set(0); // Force power OFF instantly
+      } else if (body.status === "active") {
+        await adminRtdb.ref(controlPath).set(1); // Restore power instantly
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("PUT Outlet Error:", err);
+    return NextResponse.json(
+      { error: "Failed to update outlet" },
       { status: 500 },
     );
   }
